@@ -1,14 +1,4 @@
-function f = velocity_Matrix(fft, thresh)
-    
-%     fft(abs(fft) < thresh) = complex(0,0);
-    
-% %     f_mag_overtime = zeros(size(fft,1),size(fft,2));
-% % 
-% %     for i = 1 : size(fft, 2)
-% %         f_mag_overtime(:, i) = abs(fft(:,i)); 
-% %     end
-    
-%     f = abs(fft);
+function f = velocityMatrix(fft, thresh)
 
     temp = fft;
 

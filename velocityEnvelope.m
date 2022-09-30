@@ -1,4 +1,4 @@
-function f = velocity_Envelope(smooth, thresh, s, f)
+function f = velocityEnvelope(smooth, thresh, s, f)
 
 
     for i = 1 : size(s, 2)
