@@ -1,4 +1,4 @@
-function f = VelocityCleaner(vSpectrogram)
+function f = velocityCleaner(vSpectrogram)
     average = median(vSpectrogram);
     locs = find(vSpectrogram < 0 | vSpectrogram > 450);
 
