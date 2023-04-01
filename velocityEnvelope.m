@@ -14,6 +14,10 @@ function f = velocityEnvelope(smooth, s, f)
     end
 
     % f_envelope = lowpass(f_envelope,5,Fs);
-    f = envelope(f_envelope, smooth, 'peak');
+    if smooth ~= 0
+        f_envelope = envelope(f_envelope, smooth, 'peak');
+    end
+    
+    f = f_envelope;
 end
 
