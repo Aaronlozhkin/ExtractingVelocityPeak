@@ -1,8 +1,6 @@
-function f = velocityEnvelope(smooth, s, f)
+function f = velocityEnvelope(smooth, thresh, s, f)
     
-    
-    
-    f_mag_overtime = abs(s);
+    f_mag_overtime = gather(abs(s));
     f_envelope = zeros(size(s,2), 1);
 
     for i = 1 : size(s,2)
