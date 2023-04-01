@@ -4,7 +4,7 @@ function f = velocityCleaner(vSpectrogram)
     % around that outlier until it levels out at the median.
     
     average = median(vSpectrogram);
-    placeHolder = NaN;
+    placeHolder = average;
     locs = find(vSpectrogram < -50 | vSpectrogram > 300);
 
     if ~isempty(locs)
