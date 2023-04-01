@@ -1,7 +1,7 @@
 function f = velocityMatrix(fft, thresh)
     
-    fft = gather(fft);
-    temp = gather(fft);
+    fft = abs(gather(fft));
+    temp = abs(gather(fft));
 
     temp(abs(temp) < thresh) = 0;
 

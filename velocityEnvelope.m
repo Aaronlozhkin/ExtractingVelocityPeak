@@ -1,7 +1,5 @@
 function f = velocityEnvelope(smooth, s, f)
-    
-    
-    
+ 
     f_mag_overtime = abs(s);
     f_envelope = zeros(size(s,2), 1);
 
