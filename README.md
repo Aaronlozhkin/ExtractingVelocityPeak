@@ -22,6 +22,8 @@ MATLAB application that outputs a fourier analysis of the audio file ranging fro
 
 ## Developed in MATLAB R2021a
 Running this applicatoin in another version of MATLAB...at your own risk
+### Toolboxes
+- Signal Processing Toolbox
 
 ## Run
 - **velocityMatrixGui.mlapp**
