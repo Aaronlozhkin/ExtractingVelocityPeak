@@ -19,3 +19,9 @@ MATLAB application that outputs a fourier analysis of the audio file ranging fro
     - Outputs the highest intensity velocity envelope of an ultrasound fourier transform. Takes smoothfactor, threshold, matrix, and frequency index as input.
 - **Velocity Cleaning Script**
     - Filters the velocity envelope to include phsyiologically sound values. Takes an unfiltered velocity envelope as input.
+
+## Developed in MATLAB R2021a
+Running this applicatoin in another version of MATLAB...at your own risk
+
+## Run
+- **velocityMatrixGui.mlapp**
