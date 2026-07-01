@@ -1,0 +1,2230 @@
+% This Script was written to clean the raw data Created by Bemin Ghobreal
+% Last update 2 11/6/2013
+
+%Code was changed on 1_25_2021 Valentin and Step line 727, 728, 731,732
+%from 5 second selection to a 1 second selection NEXT TIME LOOK AT 1614 HOW
+%IS IT SAVING ALIGNMENT BTW BP and TCD
+
+% Input output is the cleaning file which contains the following: data and
+% original_data>> is the raw data file titles >> is the titles from Lab
+% chart
+%ticktimes >. is the raw time before cleaning MCA ACA ECG BP CO2 BV iCO2
+%etCO2 tetCo2 ietCo2 iRRi
+% functions related to notes
+
+%% check dependancies
+
+% MATLAB version check
+
+% Desired MATLAB version to check for
+desiredVersion = 'R2021a';
+
+% Get the MATLAV version as a string
+matlabVersion = version;
+
+% Check if the MATLAB version string contains the desired version
+if ~isempty(strfind(matlabVersion, desiredVersion)) %2014a compatible
+    disp(['MATLAB is version ' desiredVersion '.']);
+else
+    error(['This code is meant to only work with MATLAB version '...
+         desiredVersion '. Your version: ' matlabVersion '. Please install '...
+         desiredVersion ' and run again.']);
+end
+
+% Toolbox check
+installedToolboxes = ver;
+installedToolboxNames = {installedToolboxes.Name};
+%requiredToolboxes = {'Bioinformatics Toolbox', 'Signal Processing Toolbox',...
+%                    'Statistics and Machine Learning Toolbox','Image Processing Toolbox'}; % add more here
+
+requiredToolboxes = {'Signal Processing Toolbox','Statistics and Machine Learning Toolbox'};
+                
+%Check each required toolbox
+for i = 1:length(requiredToolboxes)
+    if any(strcmp(requiredToolboxes{i}, installedToolboxNames))
+        fprintf('%s is installed.\n', requiredToolboxes{i});
+    else
+        error('%s is not installed.\n', requiredToolboxes{i});
+    end
+end
+
+
+
+
+%% Section1 : Import data.mat
+close all
+clear
+clear
+clc
+
+dateprocessed = clock;
+set(0, 'DefaulttextInterpreter', 'none') %change text interpreter so no longer creates subscripts in titles
+
+initials = inputdlg('Please enter your initials.');
+Notes_list ={};
+filterspec = '*.mat';
+Title = 'Pick data.mat file from velocityMatrixGui:';
+original_path = pwd;
+[infile,pathname] = uigetfile(filterspec,Title);
+
+if infile == 0
+    return;
+end
+infile_pathname = [pathname infile];
+
+d = load(infile_pathname);
+
+t = d.time_array;
+
+BV = d.VelocityEnvelope;
+
+  
+%% Drop Down Filter Stage 1 (used to be Stage 8/)
+    time = t;
+SR = round(1./mean(diff(t)));
+
+l = 1; %L is one
+
+    figure(1)
+    scrsz = get(0,'ScreenSize');
+    set(gcf,'Position',[1 scrsz(4)*.05 scrsz(3) scrsz(4)*.85])
+    clf
+
+    plot(time,BV(:,1));
+    title('MCA')
+    ylabel('cm/s')
+    xlabel('Time(s)'); axis tight;
+
+    button = myquestdlg('Do you need to use a drop filter?','Continue Operation','Yes','No','Help','No');
+    if strcmp(button,'Yes')
+       disp('Performing drop filter')
+    elseif strcmp(button,'No')
+       disp('Continue')
+    elseif strcmp(button,'Help')
+       disp('Sorry, no help available')
+    end
+
+
+    %%Remove drop out points and reinterpolate
+
+
+    if strcmp(button,'Yes')
+    %     BVorig = MCA1; BV(:,1)=MCA1; BV(:,2)=MCA2;
+        t = time;
+
+        %pick thresholds
+        button = 0;
+        uthreshold(1) = mean(BV(:,l))+3*std(BV(:,l));
+        lthreshold(1) = mean(BV(:,l))-3*std(BV(:,l));
+        urange(1) = max(max(BV(:,l))*1.1,uthreshold(1));
+        lrange(1) = min(min(BV(:,l))-abs(min(BV(:,l))*0.1), lthreshold(1));
+        basefilter1 = 0;
+        recalc1 = 0;
+        Value = 'Value';
+        XL2 = [0 max(t)];
+        XL3 = XL2;
+
+
+        while button==0
+
+            figure(1)
+            scrsz = get(0,'ScreenSize');
+            set(gcf,'Position',[1 scrsz(4)*.05 scrsz(3) scrsz(4)*.85])
+            clf
+
+            plot(t,BV(:,l),'b-')
+            hold on
+            plot(XL2, [uthreshold(1) uthreshold(1)],'g-')
+            plot(XL2, [lthreshold(1) lthreshold(1)],'g-')
+            hold off
+            ha2 = get(gcf,'CurrentAxes');
+            ylabel('BV ')
+            YL1 = ylim;
+            plot_title = 'Raw data to be filtered';
+            title(plot_title);
+            scrollplot;
+            xlim(XL2);
+
+
+            pb1u = uicontrol(gcf,'Style','slider','Max',ceil(urange(1)),'Min',round(mean(BV(:,l))),'Value',round(uthreshold(1)),'SliderStep',[0.01 0.1],'units','normalized','Position',[.925 .6 .025 .3],'Callback','uthreshold(1) = get(pb1u,Value); uiresume;');
+            pb1ut1 = uicontrol(gcf,'style','text','string',ceil(urange(1)),'units','normalized','HorizontalAlignment','left','Position',[.96 .9 .025 .025]);
+            pb1ut2 = uicontrol(gcf,'style','text','string',round(mean(BV(:,l))),'units','normalized','HorizontalAlignment','left','Position',[.96 .575 .025 .025]);
+
+            pb1u2 = uicontrol(gcf,'Style','slider','Max',round(mean(BV(:,l))),'Min',floor(lrange(1)),'Value',round(lthreshold(1)),'SliderStep',[0.01 0.1],'units','normalized','Position',[.925 .1 .025 .3],'Callback','lthreshold(1) = get(pb1u2,Value); uiresume;');
+            pb1ut3 = uicontrol(gcf,'style','text','string',round(mean(BV(:,l))),'units','normalized','HorizontalAlignment','left','Position',[.96 .4 .025 .025]);
+            pb1ut4 = uicontrol(gcf,'style','text','string',floor(lrange(1)),'units','normalized','HorizontalAlignment','left','Position',[.96 .075 .025 .025]);
+
+            pb3u = uicontrol(gcf,'Style','pushbutton','String','BaseF1','units','normalized','Position',[.925 .5 .05 .05],'Callback','basefilter1 = 1; redetect = 1; uiresume;');
+            pbexit = uicontrol(gcf,'Style','pushbutton','String','Done','units','normalized','Position',[.9 .01 .1 .05],'Callback','button = 1; uiresume;');
+
+            uiwait(gcf)
+
+            if basefilter1 == 1
+                BV1a = zeros(length(BV(:,l)),1);
+                for i = 1:length(BV(:,l))
+                    BV1a(i) = nanmean(BV(i:i+SR),1);
+                end
+                BV(:,l) = BV(:,l) -BV1a';
+                basefilter1 = 0;
+                uthreshold(1) = mean(BV(:,l))+3*std(BV(:,l));
+                lthreshold(1) = mean(BV(:,l))-3*std(BV(:,l));
+                recalc1 = 1;
+           end
+
+            XL2 = xlim(ha2);
+
+        end
+
+        BV(:,l) = drop_filter(t,BV(:,l),round(SR),lthreshold(1),uthreshold(1));
+
+    %     BV(:,1) = aca_filtered; BV(:,2) = mca_filtered;
+
+        if recalc1 == 1
+            BV(:,l) = BV(:,l) + BV1a';
+        end
+
+    end
+
+    clear lthreshold uthreshold
+
+
+close(gcf);
+
+
+close all;
+%%
+
+SZB = size(BV);
+if SZB(1) < SZB(2)  % this line added to make sure that BV  is in thefollowin  orientation (74532,2) the secnd number is the numberf arteries 
+BV=BV';
+end
+
+
+
+%% Calculate iRRi
+
+ECG = BV(:,1);
+
+points = ceil(0.2*SR);
+thresh = max(ECG)*0.35;
+iRRi = Peaksmsa(ECG,points,thresh);
+
+   %% Quick check to see alignment of BP and BV to ECG
+   
+%    figure; plot(t,ECG.*80); hold on;
+%    plot(t,dumy_MCA*80,'g');plot(t,BP,'m'); title('Are the three signals
+%    aligned?'); scrollplot
+   
+   %% Section6: Detecting Peaks
+
+    SR = round(1./mean(diff(t)));
+
+    points = ceil(0.2*SR);
+    thresh = max(ECG)*0.35;
+    maxthresh = max(ECG)*1.1;
+    minthresh = min(0,min(ECG));
+    Value = 'value';
+ Remove_Group = 0;
+    button = 0;
+    basefilter = 0;
+    LPfilter = 0;
+
+    iRRi = Peaksmsa(ECG,points,thresh);
+    XL = [0 length(ECG)];
+    XL2 = [0 max(t)];
+    redetect = 0;
+
+    HR = 1./diff(t(iRRi))*60;
+
+    % MCA1 = BV(:,1); MCA2 = BV(:,2);
+
+    ECGorig = ECG;
+    k=50;
+    cutoff_freq = 25;
+%     cutoff_freq = SR/4;       %data was previously sampled at 100Hz.  Now
+%     that we are sampling at 1000Hz, no longer 25hz cutoff
+
+    minC    = nanmedian(ECG) - 2*nanstd(ECG);
+    maxC    = nanmedian(ECG) + 2*nanstd(ECG);
+    ECG = (ECG - minC) /(maxC - minC);
+
+ 
+    ECGoriginal = ECG;
+   thresh = max(ECG)*0.35;
+
+    while button==0
+
+        if redetect == 1
+            iRRi = Peaksmsa(ECG,points,thresh);
+            bad = find(diff(t(iRRi))<0.15);
+            iRRi(bad+1) = [];
+            HR = 1./diff(t(iRRi))*60;
+            redetect = 0;
+        end
+
+        figure(1)
+         clf;
+        scrsz = get(0,'ScreenSize');
+        set(gcf,'Position',[1 scrsz(4)*.05 scrsz(3) scrsz(4)*.85])
+        subplot(3,1,1:2)
+            plot(ECG);
+            ha = get(gcf,'CurrentAxes');
+            hold on
+            hline = refline(0,thresh);
+            set(hline,'Color','y');
+            plot(iRRi,ECG(iRRi),'ro')
+            hold off
+            scrollplot;
+            xlim(XL)
+            YL1 = ylim;
+        subplot(3,1,3)
+            plot(t(iRRi(2:end)),HR)
+            ylabel('HR')
+            xlim(XL2)
+            ha2 = get(gcf,'CurrentAxes');
+
+
+        ss = get(gcf,'Position');
+
+        pb1u = uicontrol(gcf,'Style','slider','Max',ceil(max(ECG)*1.2),'Min',floor(min(ECG)-max(ECG)*0.2),'Value',round(thresh),'SliderStep',[0.001 0.1],'units','normalized','Position',[.925 .5 .025 .4],'Callback','thresh = get(pb1u,Value); uiresume;');
+        pb1ut1 = uicontrol(gcf,'style','text','string',ceil(YL1(2)),'units','normalized','HorizontalAlignment','left','Position',[.96 .86 .025 .025]);
+        pb1ut2 = uicontrol(gcf,'style','text','string',floor(YL1(1)),'units','normalized','HorizontalAlignment','left','Position',[.96 .5 .025 .025]);
+        pb1ut3 = uicontrol(gcf,'style','text','string',round(thresh),'units','normalized','HorizontalAlignment','left','Position',[.96 .68 .025 .025]);
+
+        pb2u = uicontrol(gcf,'Style','pushbutton','String','Delay+','units','normalized','Position',[.925 .45 .05 .03],'Callback','points = points + points*.1; redetect = 1; uiresume;');
+        pb2l = uicontrol(gcf,'Style','pushbutton','String','Delay-','units','normalized','Position',[.925 .41 .05 .03],'Callback','points = points - points*.1; redetect = 1; uiresume;');
+        pb3u = uicontrol(gcf,'Style','pushbutton','String','Delay++','units','normalized','Position',[.925 .37 .05 .03],'Callback','points = points + points*.5; redetect = 1; uiresume;');
+        pb3l = uicontrol(gcf,'Style','pushbutton','String','Delay--','units','normalized','Position',[.925 .33 .05 .03],'Callback','points = points - points*.5; redetect = 1; uiresume;');
+
+        pb5u = uicontrol(gcf,'Style','pushbutton','String','Thresh+','units','normalized','Position',[.925 .29 .05 .03],'Callback','thresh = thresh + thresh*.05; redetect = 1; uiresume;');
+        pb5l = uicontrol(gcf,'Style','pushbutton','String','Thresh-','units','normalized','Position',[.925 .25 .05 .03],'Callback','thresh = thresh - thresh*.05; redetect = 1; uiresume;');
+        
+        pb4u = uicontrol(gcf,'Style','pushbutton','String','LPF','units','normalized','Position',[.925 .2 .05 .03],'Callback','LPfilter = 1; redetect = 1; uiresume;');
+        pb4l = uicontrol(gcf,'Style','pushbutton','String','BaseF','units','normalized','Position',[.925 .16 .05 .03],'Callback','basefilter = 1; redetect = 1; uiresume;');
+        pb6l = uicontrol(gcf,'Style','pushbutton','String','ReDetect','units','normalized','Position',[.925 .12 .05 .03],'Callback','redetect = 1; uiresume;');
+
+        pb10 = uicontrol(gcf,'Style','pushbutton','String','ECG inverse','units','normalized','Position',[.2 .025 .05 .03],'Callback','ECG = -ECG; uiresume;');
+        pb7 = uicontrol(gcf,'Style','pushbutton','String','Left Artery','units','normalized','Position',[.4 .025 .05 .03],'Callback','ECG = BV(:,1); thresh = max(ECG)*0.35; uiresume;');
+        pb8 = uicontrol(gcf,'Style','pushbutton','String','Right Artery','units','normalized','Position',[.6 .025 .05 .03],'Callback','ECG = BV(:,2); thresh = max(ECG)*0.35; uiresume;');
+        pb9 = uicontrol(gcf,'Style','pushbutton','String','BP','units','normalized','Position',[.8 .025 .05 .03],'Callback','ECG = BP;  thresh = max(ECG)*0.35; uiresume;');
+
+        pbexit = uicontrol(gcf,'Style','pushbutton','String','Done','units','normalized','Position',[.925 .05 .05 .05],'Callback','button = 1; uiresume;');
+
+        uiwait(gcf)
+
+        ECGf = zeros(length(ECG),1);
+
+        if basefilter == 1
+%            set(gcf,'Pointer','watch')
+    %         baseECG = medfilt1(ECG,round(SR)); ECGf=ECG - baseECG +
+    %         mean(baseECG);
+    %       use a 5 sec moving median to remove baseline changes
+
+            ECGold = ECG;
+%             for i = 1:length(ECG)
+%                 if i+round(SR)*3 <= length(ECG)
+%                     ECGf(i) = median(ECG(i:i+round(SR)*3));
+%                 else
+%                     ECGf(i) =
+%                     median(ECG(length(ECG)-(round(SR)*3):length(ECG)));
+%                 end
+%             end szECGf = size(ECGf); if szECGf(1)>1
+%                 ECGf = ECGf.';
+%             end ECG = ECG - ECGf;
+            basefilter = 0;
+%             [b,a] = butter(8,5/SR,'high');
+            [b,a] = butter(8,5/(SR/2),'high');
+            ECGf = filtfilt(b,a,ECG);
+            ECG = ECGf;
+%             set(gcf,'Pointer','arrow')
+        end
+
+        if LPfilter == 1
+            set(gcf,'Pointer','watch')
+             [b,a] = butter(8,cutoff_freq/(SR/2),'low');
+             ECGf = filtfilt(b,a,ECGoriginal);
+             ECG = ECGf;
+             LPfilter = 0;
+             cutoff_freq=cutoff_freq*.9;
+            set(gcf,'Pointer','arrow')
+        end
+
+        XL = xlim(ha);
+
+    end
+
+    closefig = get(0,'CurrentFigure');
+    close(closefig);
+
+    iRRi = Peaksmsa(ECG,points,thresh); 
+    bad = find(diff(t(iRRi))<0.25);
+    iRRi(bad+1) = [];
+
+    button = 0;
+    bad = [];
+    iRRiold = iRRi;
+
+    tRRi = t(iRRi);
+    RRi = diff(tRRi)*1000;
+    HR = 60000./RRi;
+    timeP = t(iRRi)';
+
+    XL = [0 max(t)];
+    XL2 = XL;
+
+    BP = BV(:,1);
+    
+	minC    = nanmedian(BP) - 2*nanstd(BP);
+    maxC    = nanmedian(BP) + 2*nanstd(BP);
+    BPdetect = (BP - minC) /(maxC - minC);
+    com_signal=BPdetect;
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% feom ncleandata_nasa
+%
+  Remove_Group =0;
+     notes = 0;
+     removed_peaks = iRRi;
+     iRRi_original = iRRi;
+notes=0;
+ Remove_Group = 0;
+    button = 0;
+while button == 0
+
+        
+          if length(com_signal)> length(t)
+           com_signal = com_signal(1:length(t));
+       end
+        
+        
+        figure(1)
+        clf
+        scrsz = get(0,'ScreenSize');
+        set(gcf,'Position',[1 scrsz(4)*.05 scrsz(3) scrsz(4)*.85])
+        clf
+        subplot(3,1,1:2)    
+            plot(t,ECG)
+            hold on
+            plot(t,com_signal*Mul,'k-')
+            plot(t(iRRi),ECG(iRRi),'ro','linewidth',2 )
+            hold off
+            scrollplot
+            xlim(XL)
+            ha = get(gcf,'CurrentAxes');
+        subplot(3,1,3)        
+            plot(t(iRRi(2:end)),HR)
+            ylabel('HR')
+            scrollplot;
+            xlim(XL2)
+            ha2 = get(gcf,'CurrentAxes');
+        ss = get(gcf,'Position');
+
+        pb1u = uicontrol(gcf,'Style','pushbutton','String','Remove','units','normalized','Position',[.925 .7 .04 .04],'Callback', ...
+            '[x, y] = ginput(1); x = x(end); [mpt bad] = min(abs(t(iRRi)-x)); iRRiold = iRRi; iRRi(bad) = []; HR = 1./diff(t(iRRi)).*60; uiresume;');
+        pb2u = uicontrol(gcf,'Style','pushbutton','String','Add','units','normalized','Position',[.925 .5 .04 .04],'Callback', ...
+            '[x, y] = ginput(1); x = round(x(end).*SR); [mpt good] = max(ECG(x-round(SR/5):x+round(SR/5))); iRRiold = iRRi; iRRi(end+1) = (good + x-round(SR/5)); iRRi = sort(iRRi); iRRi = unique(iRRi); HR = 1./diff(t(iRRi)).*60; uiresume;');
+        pb3u = uicontrol(gcf,'Style','pushbutton','String','Undo','units','normalized','Position',[.925 .3 .04 .04],'Callback', ...
+            'iRRi = iRRiold; HR = 1./diff(t(iRRi)).*60; uiresume;');
+        pb4u = uicontrol(gcf,'Style','pushbutton','String','AddClick','units','normalized','Position',[.925 .9 .04 .04],'Callback', ...
+            '[x, y] = ginput(1); x = round(x(end).*SR); iRRiold = iRRi; iRRi(end+1) = x; iRRi = sort(iRRi); iRRi = unique(iRRi); HR = 1./diff(t(iRRi)).*60;  uiresume;');
+    %    pb4u = uicontrol(gcf,'Style','pushbutton','String','Zoom
+    %    Out','Position',[ss(3)*.4 1 ss(3)*.1 ss(4)*.05],'Callback','XL =
+    %    xlim; XL = XL*1.25; uiresume;'); pb4l =
+    %    uicontrol(gcf,'Style','pushbutton','String','Zoom
+    %    In','Position',[ss(3)*.2 1 ss(3)*.1 ss(4)*.05],'Callback','XL =
+    %    xlim; XL = XL*0.75; uiresume;'); pb5u =
+    %    uicontrol(gcf,'Style','pushbutton','String','Shift
+    %    Right','Position',[ss(3)*.8 1 ss(3)*.1 ss(4)*.05],'Callback','XL =
+    %    xlim; XL = XL+diff(XL)*.5; uiresume;');
+         pb1u = uicontrol(gcf,'Style','pushbutton','String','Remove Group','units','normalized','Position',[.025 .7 .05 .04],'Callback','Remove_Group = 1; uiresume;');
+        pb6u = uicontrol(gcf,'Style','pushbutton','String','Undo All','units','normalized','Position',[.025 .35 .05 .04],'Callback', ...
+            'iRRi = iRRi_original; HR = 1./diff(t(iRRi)).*60; uiresume;');
+       
+         pb6u = uicontrol(gcf,'Style','pushbutton','String','Notes','FontSize',12,'units','normalized','Position',[.025 .55 .07 .04],'BackgroundColor','g','Callback', ...
+             'notes = 1; uiresume;');
+        
+               
+    if exist('MCA1')
+    pbA1 = uicontrol(gcf,'Style','pushbutton','String','MCA1','units','normalized','Position',[.025 0.3 .08 .04],'Callback','com_signal=BV(:,1)/mean(MCA1); uiresume;');
+    end
+    if exist('MCA2')
+    pbA2 = uicontrol(gcf,'Style','pushbutton','String','MCA2','units','normalized','Position',[.025 0.25 .08 .04],'Callback','com_signal=BV(:,2)/mean(MCA2); uiresume;');
+    end
+    if exist('MCA')
+    pbA = uicontrol(gcf,'Style','pushbutton','String','MCA','units','normalized','Position',[.025 0.2 .08 .04],'Callback','com_signal=MCA/mean(MCA); uiresume;');
+    end
+    
+  
+    
+        pbexit = uicontrol(gcf,'Style','pushbutton','String','Done','units','normalized','Position',[.925 .075 .05 .05],'Callback','button = 1; uiresume;');
+
+        uiwait(gcf)
+        if notes ==1
+             answer_notes = inputdlg('Please enter your notes:');
+             Notes_list{length(Notes_list)+1}= answer_notes;
+             notes =0;
+        end
+        
+        if Remove_Group > 0
+            iRRiold = iRRi;
+            removed_peaks =iRRi;
+            k = waitforbuttonpress;
+            point1 = get(gca,'CurrentPoint');    % button down detected
+            finalRect = rbbox;                   % return figure units
+            point2 = get(gca,'CurrentPoint');    % button up detected
+            point1 = point1(1,1:2);              % extract x and y
+            point2 = point2(1,1:2);
+            p1 = min(point1,point2);             % calculate locations
+            offset = abs(point1-point2);         % and dimensions
+            x = [p1(1) p1(1)+offset(1) p1(1)+offset(1) p1(1) p1(1)]; % is the time
+            y = [p1(2) p1(2) p1(2)+offset(2) p1(2)+offset(2) p1(2)];
+            hold on
+            axis manual
+            fig = plot(x,y,'r','linewidth',2) ;
+            
+            Index_Start_Array=find(t(iRRi)<= min(x));
+            Index_end_Array  = find(t(iRRi)<= max(x));
+            
+            if  (isempty(Index_Start_Array)) ||  (isempty(Index_end_Array) )
+                
+                display('');
+                
+            else
+                Index_Start = Index_Start_Array(end);
+                Index_end = Index_end_Array(end);
+                
+                removed_peaks(Index_Start:Index_end)=[];
+                iRRi = removed_peaks;
+                
+                HR = 1./diff(t(iRRi)).*60;
+                Remove_Group = 0;
+                Index_Start_Array=[];
+                Index_end_Array=[];
+                removed_peaks=[];
+            end
+        end
+        
+        
+        %edge case if we close the figure in case something froze
+        if  isvalid(ha) && isvalid(ha)
+            XL = xlim(ha);
+            XL2 = xlim(ha2);
+        else
+            ;% Breakpoint can be placed here
+            XL = [0 max(t)];
+            XL2 = XL; 
+        end
+
+    end
+
+    ikp = find(iRRi<length(t));
+    iRRi = iRRi(ikp);
+    tRRi = t(iRRi);
+    RRi = diff(tRRi)*1000;
+
+    tRRi(end) = [];
+    %RRi(end) = [];
+    % end of MATLAB peak detection
+
+    time = t;
+    ECG = ECGoriginal;             % why reset filtered ecg to raw ecg?
+    % end of MATLAB peak det
+
+   
+    
+    %% Section 7 : Align BP and TCD data for spectral analysis
+    endtime=  endtime - startime;
+    startime=startime-startime;
+    BPshift = BP.';
+    BV_delay = zeros(3,2);
+    if num_artery==3;
+        BV_delay = zeros(3,3);
+    end
+    BP_delay = zeros(3,1);
+    for fnm=1:num_artery
+      BVshift(:,fnm) = medfilt1(BV(:,fnm),33);
+    end
+    for k=1:3  %check alignment at three sections
+        
+        button = 0;
+        if k>1
+            BV_delay(k,:) = BV_delay(k-1,:);
+            BP_delay(k,:) = BP_delay(k-1,:);
+        end
+        
+ %       for j=1:num_artery
+            
+        switch k
+            case 1
+                XL = [startime+30 startime+40];
+                plot_title = ['Beginning'];
+            case 2
+                XL = [startime+round((endtime-startime)/2) startime+round((endtime-startime)/2)+10];
+                plot_title = ['Middle'];
+            case 3
+                XL = [endtime-40 endtime-30];
+                plot_title = ['End'];
+        end
+
+        while button==0
+                
+            figure(1)
+            clf
+            subplot(num_artery+1,1,1)
+                plot(t(iRRi),BPshift(iRRi),'ro')
+                hold on
+                plot(t,BPshift,'b-')
+                hold off
+                xlim(XL)
+                title(plot_title)
+                for art=1:num_artery
+                subplot(num_artery+1,1,art+1)
+                plot(t(iRRi),BVshift(iRRi,art),'ro')
+                hold on
+                plot(t,BVshift(:,art),'b-')
+                hold off
+                xlim(XL)
+                end
+%             subplot(3,1,3)
+%                 plot(t(iRRi),BVshift(iRRi,2),'ro') hold on
+%                 plot(t,BVshift(:,2),'b-') hold off xlim(XL)
+
+                
+            pb1au = uicontrol(gcf,'Style','pushbutton','String','Shift+','units','normalized','Position',[.925 .9 .05 .03],'Callback', ...
+                'BPshift=circshift(BPshift,10); BP_delay(k,1) = BP_delay(k,1)+10; uiresume;');
+            pb2au = uicontrol(gcf,'Style','pushbutton','String','Shift-','units','normalized','Position',[.925 .86 .05 .03],'Callback', ...
+                'BPshift=circshift(BPshift,-10); BP_delay(k,1) = BP_delay(k,1)-10;  uiresume;');
+            pb3au = uicontrol(gcf,'Style','pushbutton','String','Shift++','units','normalized','Position',[.925 .82 .05 .03],'Callback', ...
+                'BPshift=circshift(BPshift,100); BP_delay(k,1) = BP_delay(k,1)+100;  uiresume;');
+            pb4au = uicontrol(gcf,'Style','pushbutton','String','Shift--','units','normalized','Position',[.925 .78 .05 .03],'Callback', ...
+                'BPshift=circshift(BPshift,-100); BP_delay(k,1) = BP_delay(k,1)-100;  uiresume;');
+          
+%             for nm=1:num_artery
+            pb1u = uicontrol(gcf,'Style','pushbutton','String','Shift+','units','normalized','Position',[.925 .70 .05 .03],'Callback', ...
+                'BVshift(:,1)=circshift(BVshift(:,1),10); BV_delay(k,1) = BV_delay(k,1)+10; uiresume;');
+            pb2u = uicontrol(gcf,'Style','pushbutton','String','Shift-','units','normalized','Position',[.925 .66 .05 .03],'Callback', ...
+                'BVshift(:,1)=circshift(BVshift(:,1),-10); BV_delay(k,1) = BV_delay(k,1)-10;  uiresume;');
+            pb3u = uicontrol(gcf,'Style','pushbutton','String','Shift++','units','normalized','Position',[.925 .62 .05 .03],'Callback', ...
+                'BVshift(:,1)=circshift(BVshift(:,1),100); BV_delay(k,1) = BV_delay(k,1)+100;  uiresume;');
+            pb4u = uicontrol(gcf,'Style','pushbutton','String','Shift--','units','normalized','Position',[.925 .58 .05 .03],'Callback', ...
+                'BVshift(:,1)=circshift(BVshift(:,1),-100); BV_delay(k,1) = BV_delay(k,1)-100;  uiresume;');
+%             end
+if num_artery==2;
+            pb5u = uicontrol(gcf,'Style','pushbutton','String','Shift+','units','normalized','Position',[.925 .50 .05 .03],'Callback', ...
+                'BVshift(:,2)=circshift(BVshift(:,2),10); BV_delay(k,2) = BV_delay(k,2)+10;  uiresume;');
+            pb6u = uicontrol(gcf,'Style','pushbutton','String','Shift-','units','normalized','Position',[.925 .46 .05 .03],'Callback', ...
+                'BVshift(:,2)=circshift(BVshift(:,2),-10); BV_delay(k,2) = BV_delay(k,2)-10; uiresume;');
+            pb7u = uicontrol(gcf,'Style','pushbutton','String','Shift++','units','normalized','Position',[.925 .42 .05 .03],'Callback', ...
+                'BVshift(:,2)=circshift(BVshift(:,2),100); BV_delay(k,2) = BV_delay(k,2)+100; uiresume;');
+            pb8u = uicontrol(gcf,'Style','pushbutton','String','Shift--','units','normalized','Position',[.925 .38 .05 .03],'Callback', ...
+                'BVshift(:,2)=circshift(BVshift(:,2),-100); BV_delay(k,2) = BV_delay(k,2)-100; uiresume;');
+            
+            %this section added for 3 artery data by BS 7/9/18
+elseif num_artery==3;    
+    
+            pb5u = uicontrol(gcf,'Style','pushbutton','String','Shift+','units','normalized','Position',[.925 .50 .05 .03],'Callback', ...
+                'BVshift(:,2)=circshift(BVshift(:,2),10); BV_delay(k,2) = BV_delay(k,2)+10;  uiresume;');
+            pb6u = uicontrol(gcf,'Style','pushbutton','String','Shift-','units','normalized','Position',[.925 .46 .05 .03],'Callback', ...
+                'BVshift(:,2)=circshift(BVshift(:,2),-10); BV_delay(k,2) = BV_delay(k,2)-10; uiresume;');
+            pb7u = uicontrol(gcf,'Style','pushbutton','String','Shift++','units','normalized','Position',[.925 .42 .05 .03],'Callback', ...
+                'BVshift(:,2)=circshift(BVshift(:,2),100); BV_delay(k,2) = BV_delay(k,2)+100; uiresume;');
+            pb8u = uicontrol(gcf,'Style','pushbutton','String','Shift--','units','normalized','Position',[.925 .38 .05 .03],'Callback', ...
+                'BVshift(:,2)=circshift(BVshift(:,2),-100); BV_delay(k,2) = BV_delay(k,2)-100; uiresume;');
+    
+            pb9u = uicontrol(gcf,'Style','pushbutton','String','Shift+','units','normalized','Position',[.925 .30 .05 .03],'Callback', ...
+                'BVshift(:,3)=circshift(BVshift(:,3),10); BV_delay(k,3) = BV_delay(k,3)+10;  uiresume;');
+            pb10u = uicontrol(gcf,'Style','pushbutton','String','Shift-','units','normalized','Position',[.925 .26 .05 .03],'Callback', ...
+                'BVshift(:,3)=circshift(BVshift(:,3),-10); BV_delay(k,3) = BV_delay(k,3)-10; uiresume;');
+            pb11u = uicontrol(gcf,'Style','pushbutton','String','Shift++','units','normalized','Position',[.925 .22 .05 .03],'Callback', ...
+                'BVshift(:,3)=circshift(BVshift(:,3),100); BV_delay(k,3) = BV_delay(k,3)+100; uiresume;');
+            pb12u = uicontrol(gcf,'Style','pushbutton','String','Shift--','units','normalized','Position',[.925 .18 .05 .03],'Callback', ...
+                'BVshift(:,3)=circshift(BVshift(:,3),-100); BV_delay(k,3) = BV_delay(k,3)-100; uiresume;');
+end
+            pb9l = uicontrol(gcf,'Style','pushbutton','String','Zoom In','units','normalized','Position',[.15 .03 .05 .05],'Callback','XL = xlim; XL(2) = XL(2) - (XL(2)-XL(1))*0.25; uiresume;');
+            pb9u = uicontrol(gcf,'Style','pushbutton','String','Zoom out','units','normalized','Position',[.35 .03 .05 .05],'Callback','XL = xlim; XL(2) = XL(2) + (XL(2)-XL(1))*0.25; uiresume;');
+            pb10u = uicontrol(gcf,'Style','pushbutton','String','Shift Right','units','normalized','Position',[.55 .03 .05 .05],'Callback','XL = xlim; XL = XL+5; uiresume;');
+            pb10l = uicontrol(gcf,'Style','pushbutton','String','Shift Left','units','normalized','Position',[.75 .03 .05 .05],'Callback','XL = xlim; XL = XL-5; uiresume;');
+%            pb7l =
+%            uicontrol(gcf,'Style','pushbutton','String','Instructions','units','normalized','Position',[.925
+%            .125 .05
+%            .05],'Callback','questdlg(instruct1,''Instructions'',''Done'',''Done'');
+%            uiresume;');
+
+%             pb11l =
+%             uicontrol(gcf,'Style','pushbutton','String','+','units','normalized','Position',[.05
+%             .75 .05 .05],'Callback','BVshift(:,1) = BVshift(:,1) + 1;
+%             uiresume;'); pb11u =
+%             uicontrol(gcf,'Style','pushbutton','String','-','units','normalized','Position',[.05
+%             .65 .05 .05],'Callback','BVshift(:,1) = BVshift(:,1) - 1;
+%             uiresume;'); pb12u =
+%             uicontrol(gcf,'Style','pushbutton','String','+','units','normalized','Position',[.05
+%             .3 .05 .05],'Callback','BVshift(:,2) = BVshift(:,2) + 1;
+%             uiresume;'); pb12l =
+%             uicontrol(gcf,'Style','pushbutton','String','-','units','normalized','Position',[.05
+%             .2 .05 .05],'Callback','BVshift(:,2) = BVshift(:,2) - 1;
+%             uiresume;');
+
+            pbexit = uicontrol(gcf,'Style','pushbutton','String','Done','units','normalized','Position',[.925 .05 .05 .05],'Callback','button = 1; uiresume;');
+                
+            uiwait(gcf)
+            
+        end
+        
+    end
+    
+    close gcf;
+     BV_delay_mean = round(mean(BV_delay));
+     BP_delay_mean = round(mean(BP_delay));
+for nm=1:num_artery
+     BV(:,nm) = circshift(BV(:,nm),BV_delay_mean(1));
+end
+     BP = circshift(BP',BP_delay_mean);
+     BP=BP';
+    %% 
+     
+  %% Section 8 to Drop out Filter Stage2
+%%will be removed to be section 1
+%Section to handle doppler drop out
+% 
+% for l=1:num_artery
+% 
+% 
+%     figure(1) scrsz = get(0,'ScreenSize'); set(gcf,'Position',[1
+%     scrsz(4)*.05 scrsz(3) scrsz(4)*.85]) clf
+% 
+%     plot(time,BV(:,l)); title(labels{l}) ylabel('cm/s') xlabel('Time
+%     (s)')
+% 
+%     button = myquestdlg('Do you need to use a drop filter?','Continue
+%     Operation','Yes','No','Help','No'); if strcmp(button,'Yes')
+%        disp('Performing drop filter')
+%     elseif strcmp(button,'No')
+%        disp('Continue')
+%     elseif strcmp(button,'Help')
+%        disp('Sorry, no help available') break
+%     end
+% 
+% 
+%     %%Remove drop out points and reinterpolate
+% 
+% 
+%     if strcmp(button,'Yes') %     BVorig = MCA1; %     BV(:,1)=MCA1; %
+%     BV(:,2)=MCA2;
+%         t = time;
+% 
+%         %pick thresholds button = 0; uthreshold(1) =
+%         mean(BV(:,l))+3*std(BV(:,l)); lthreshold(1) =
+%         mean(BV(:,l))-3*std(BV(:,l)); urange(1) =
+%         max(max(BV(:,l))*1.1,uthreshold(1)); lrange(1) =
+%         min(min(BV(:,l))-abs(min(BV(:,l))*0.1), lthreshold(1));
+%         basefilter1 = 0; recalc1 = 0; Value = 'Value'; XL2 = [0 max(t)];
+%         XL3 = XL2;
+% 
+% 
+%         while button==0
+% 
+%             figure(1) scrsz = get(0,'ScreenSize'); set(gcf,'Position',[1
+%             scrsz(4)*.05 scrsz(3) scrsz(4)*.85]) clf
+% 
+%             plot(t,BV(:,l),'b-') hold on plot(XL2, [uthreshold(1)
+%             uthreshold(1)],'g-') plot(XL2, [lthreshold(1)
+%             lthreshold(1)],'g-') hold off ha2 = get(gcf,'CurrentAxes');
+%             ylabel('BV ') YL1 = ylim; plot_title = 'Raw data to be
+%             filtered'; title(plot_title); scrollplot; xlim(XL2);
+% 
+% 
+%             pb1u =
+%             uicontrol(gcf,'Style','slider','Max',ceil(urange(1)),'Min',round(mean(BV(:,l))),'Value',round(uthreshold(1)),'SliderStep',[0.01
+%             0.1],'units','normalized','Position',[.925 .6 .025
+%             .3],'Callback','uthreshold(1) = get(pb1u,Value); uiresume;');
+%             pb1ut1 =
+%             uicontrol(gcf,'style','text','string',ceil(urange(1)),'units','normalized','HorizontalAlignment','left','Position',[.96
+%             .9 .025 .025]); pb1ut2 =
+%             uicontrol(gcf,'style','text','string',round(mean(BV(:,l))),'units','normalized','HorizontalAlignment','left','Position',[.96
+%             .575 .025 .025]);
+% 
+%             pb1u2 =
+%             uicontrol(gcf,'Style','slider','Max',round(mean(BV(:,l))),'Min',floor(lrange(1)),'Value',round(lthreshold(1)),'SliderStep',[0.01
+%             0.1],'units','normalized','Position',[.925 .1 .025
+%             .3],'Callback','lthreshold(1) = get(pb1u2,Value);
+%             uiresume;'); pb1ut3 =
+%             uicontrol(gcf,'style','text','string',round(mean(BV(:,l))),'units','normalized','HorizontalAlignment','left','Position',[.96
+%             .4 .025 .025]); pb1ut4 =
+%             uicontrol(gcf,'style','text','string',floor(lrange(1)),'units','normalized','HorizontalAlignment','left','Position',[.96
+%             .075 .025 .025]);
+% 
+%             pb3u =
+%             uicontrol(gcf,'Style','pushbutton','String','BaseF1','units','normalized','Position',[.925
+%             .5 .05 .05],'Callback','basefilter1 = 1; redetect = 1;
+%             uiresume;'); pbexit =
+%             uicontrol(gcf,'Style','pushbutton','String','Done','units','normalized','Position',[.9
+%             .01 .1 .05],'Callback','button = 1; uiresume;');
+% 
+%             uiwait(gcf)
+% 
+%             if basefilter1 == 1
+%                 BV1a = zeros(length(BV(:,l)),1); for i =
+%                 1:length(BV(:,l))
+%                     BV1a(i) = nanmean(BV(i:i+SR),1);
+%                 end BV(:,l) = BV(:,l) -BV1a'; basefilter1 = 0;
+%                 uthreshold(1) = mean(BV(:,l))+3*std(BV(:,l));
+%                 lthreshold(1) = mean(BV(:,l))-3*std(BV(:,l)); recalc1 =
+%                 1;
+%            end
+% 
+%             XL2 = xlim(ha2);
+% 
+%         end
+% 
+%         BV(:,l) =
+%         drop_filter(t,BV(:,l),round(SR),lthreshold(1),uthreshold(1));
+% 
+%     %     BV(:,1) = aca_filtered; %     BV(:,2) = mca_filtered;
+% 
+%         if recalc1 == 1
+%             BV(:,l) = BV(:,l) + BV1a';
+%         end
+% 
+%     end
+% 
+%     clear lthreshold clear uthreshold
+%     
+%     
+% 
+% end
+%%
+%% Section 9 Interp    
+%%Use 100ms median filter
+
+    filtlength = ceil(SR*.1);
+ 
+for l=1:num_artery
+    bv_f(:,l) = medfilt1(BV(:,l),filtlength);
+end
+bp_f = BP;
+    MBP = zeros(length(iRRi)-2,1);
+    SBP = zeros(length(iRRi)-2,1);
+    DBP = zeros(length(iRRi)-2,1);
+    MBV = zeros(length(iRRi)-2,2);
+    SBV = zeros(length(iRRi)-2,2);
+    DBV = zeros(length(iRRi)-2,2);
+    tRRim = zeros(length(iRRi)-2,1);
+    RRim = zeros(length(iRRi)-2,1);
+    CCP_ICH = zeros(length(iRRi)-2,1);
+    CCP = zeros(length(iRRi)-2,1);
+    
+    bp_f = bp_f.';
+
+for l=1: num_artery
+    for i = 1:(length(iRRi)-2)
+       MBP(i) = nanmean(bp_f(iRRi(i):iRRi(i+1)));
+       SBP(i) = nanmax(bp_f(iRRi(i):iRRi(i+1)));
+       DBP(i) = nanmin(bp_f(iRRi(i):iRRi(i+1)));
+       MBV(i,l) = nanmean(bv_f(iRRi(i):iRRi(i+1),l));
+       SBV(i,l) = nanmax(bv_f(iRRi(i):iRRi(i+1),l));
+       DBV(i,l) = nanmin(bv_f(iRRi(i):iRRi(i+1),l));
+%        MBV(i,2) = nanmean(bv_f(iRRi(i):iRRi(i+1),2)); SBV(i,2) =
+%        nanmax(bv_f(iRRi(i):iRRi(i+1),2)); DBV(i,2) =
+%        nanmin(bv_f(iRRi(i):iRRi(i+1),2));
+       tRRim(i) = nanmean(t(iRRi(i):iRRi(i+1)));
+       RRim(i) = (t(iRRi(i+1))-t(iRRi(i)))*1000;
+
+       %calculate critical closing pressure
+       if max(isnan(bp_f(iRRi(i):iRRi(i+1))))==0
+           if max(isnan(bv_f(iRRi(i):iRRi(i+1),l)))==0
+    %           figure(10)
+    %           plot(bp_f(iRRi(i):iRRi(i+1)),bv_f(iRRi(i):iRRi(i+1),1))
+               slope = polyfit(bp_f(iRRi(i):iRRi(i+1)),bv_f(iRRi(i):iRRi(i+1),l),l);
+               CCP_ICH(i) = -slope(2)/slope(1);
+    %           xlim([0 max(bp_f(iRRi(i):iRRi(i+1))*1.1)]) ylim([0
+    %           max(bv_f(iRRi(i):iRRi(i+1),1)*1.1)]) refline(slope)
+
+    %           pause(0.1)
+            end
+
+       end
+    end
+end
+
+    tRRi_old = tRRi;
+    tRRi = tRRim;
+
+    RRi_old = RRi;
+    RRi = RRim;
+    figure
+            plot(time(1:length(bp_f)),bp_f, 'b', lw, lw_thin), hold on;
+            plot(tRRi,MBP,'ko', lw, lw_thick), 
+            plot(tRRi,SBP,'ro', lw, lw_thick), 
+            plot(tRRi,DBP,'ro', lw, lw_thick), hold off;
+            axis tight
+            yl = ylim;
+            yl(1) = yl(1)-yl(2)*.05;
+            yl(2) = yl(2)+yl(2)*.05;
+            ylim(yl);
+            xlabel('Time (s)', fs, fs_label)
+            ylabel('Arterial Blood Pressure  (mmHg)', fs, fs_label)
+         scrollplot
+
+         labels = titles;
+         
+    for l = 1:num_artery
+
+        figure(1)
+        scrsz = get(0,'ScreenSize');
+        set(gcf,'Position',[1 scrsz(4)*.05 scrsz(3) scrsz(4)*.85])
+        clf
+
+        plot(time(1:length(bv_f(:,l))),bv_f(:,l), 'b', lw, lw_thin), hold on;
+        plot(tRRi,MBV(:,l),'ko', lw, lw_thick), 
+        plot(tRRi,SBV(:,l),'ro', lw, lw_thick), 
+        plot(tRRi,DBV(:,l),'ro', lw, lw_thick), hold off;
+        axis tight
+        yl = ylim;
+        yl(1) = yl(1)-yl(2)*.05;
+        yl(2) = yl(2)+yl(2)*.05;
+        ylim(yl);
+        xlabel('Time (s)', fs, fs_label)
+        ylabel('Arterial Blood Pressure  (mmHg)', fs, fs_label)
+        title (labels(l,:))
+        button = myquestdlg('Do you need to interpolate for bad beats?','Continue Operation','Yes','No','Help','No');
+        if strcmp(button,'Yes')
+           disp('Performing drop filter')
+        elseif strcmp(button,'No')
+           disp('Continue')
+        elseif strcmp(button,'Help')
+           disp('Sorry, no help available')
+           break
+        end
+
+        if strcmp(button,'Yes')
+
+            MBV_temp = MBV(:,l);
+            SBV_temp = SBV(:,l);
+            DBV_temp = DBV(:,l);
+
+            bv_f_temp = bv_f(:,l);
+
+            %Remove servocorrects from bp signal
+            PP = (SBV_temp-DBV_temp)./MBV_temp;
+            stdPP = nanstd(PP);
+            meanPP = nanmean(PP);
+            LPPthreshold=meanPP-2*stdPP;
+            UPPthreshold=meanPP+2*stdPP;
+            good = find(PP>=LPPthreshold & PP<=UPPthreshold);
+
+            button = 0;
+            Remove_Group=0;
+            while button == 0
+
+                instruct1 = ['Remove physiocals by looking for beats with reduced pulse pressure (PP). Adjust upper threshold (red line) with UThresh buttons (+ increases a little, ++ increases a lot, - decreases a little, -- decreases a lot). Adjust lower threshold (green) using the LThresh buttons. Once you are happy, press done'];
+
+                figure(1)
+                clf
+        %        scrsz = get(0,'ScreenSize'); set(gcf,'Position',[1
+        %        scrsz(4)*.05 scrsz(3) scrsz(4)*.85])
+            %    ss = get(gcf,'Position');
+
+                good = find(PP>=LPPthreshold & PP<=UPPthreshold);
+
+                clf
+                subplot(2,1,1)
+                plot(time(1:length(bv_f_temp)),bv_f_temp, 'b', lw, lw_thin), hold on;
+                plot(tRRi(good),MBV_temp(good),'ko', lw, lw_thick), 
+                plot(tRRi(good),SBV_temp(good),'ro', lw, lw_thick), 
+                plot(tRRi(good),DBV_temp(good),'ro', lw, lw_thick), hold off;
+                axis tight
+                yl = ylim;
+                yl(1) = yl(1)-yl(2)*.05;
+                yl(2) = yl(2)+yl(2)*.05;
+                ylim(yl);
+                xlabel('Time (s)', fs, fs_label)
+                ylabel('Blood Flow Velocity  (cm/s)', fs, fs_label)
+                   title (labels(l,:))
+                scrollplot
+
+                subplot(2,1,2)
+                plot(time(1:length(PP)),PP, 'bo')
+                hold on
+                hlineU = refline(0,LPPthreshold);
+                set(hlineU,'Color','r')
+                hlineL = refline(0,UPPthreshold);
+                set(hlineL,'Color','g')
+                hold off
+                ylabel('(Sys-Dia)/Avg  (unitless)', fs, fs_label)
+
+                pb1u = uicontrol(gcf,'Style','pushbutton','String','UThresh+','units','normalized','Position',[.925 .9 .05 .05],'Callback', ...
+                    'UPPthreshold=UPPthreshold+meanPP*0.1; uiresume;');
+                pb2u = uicontrol(gcf,'Style','pushbutton','String','UThresh-','units','normalized','Position',[.925 .8 .05 .05],'Callback', ...
+                    'UPPthreshold=UPPthreshold-meanPP*0.1; uiresume;');
+                pb3u = uicontrol(gcf,'Style','pushbutton','String','UThresh++','units','normalized','Position',[.925 .7 .05 .05],'Callback', ...
+                    'UPPthreshold=UPPthreshold+meanPP*0.5; uiresume;');
+                pb4u = uicontrol(gcf,'Style','pushbutton','String','UThresh--','units','normalized','Position',[.925 .6 .05 .05],'Callback', ...
+                    'UPPthreshold=UPPthreshold-meanPP*0.5; uiresume;');
+                pb5u = uicontrol(gcf,'Style','pushbutton','String','LThresh+','units','normalized','Position',[.925 .5 .05 .05],'Callback', ...
+                    'LPPthreshold=LPPthreshold+meanPP*0.1; uiresume;');
+                pb6u = uicontrol(gcf,'Style','pushbutton','String','LThresh-','units','normalized','Position',[.925 .4 .05 .05],'Callback', ...
+                    'LPPthreshold=LPPthreshold-meanPP*0.1; uiresume;');
+                pb7u = uicontrol(gcf,'Style','pushbutton','String','LThresh++','units','normalized','Position',[.925 .3 .05 .05],'Callback', ...
+                    'LPPthreshold=LPPthreshold+meanPP*0.5; uiresume;');
+                pb8u = uicontrol(gcf,'Style','pushbutton','String','LThresh--','units','normalized','Position',[.925 .2 .05 .05],'Callback', ...
+                    'LPPthreshold=LPPthreshold-meanPP*0.5; uiresume;');
+            % %    pb4l = uicontrol(gcf,'Style','pushbutton','String','Zoom
+            % In','Position',[ss(3)*.2 1 ss(3)*.1 ss(4)*.05],'Callback','XL
+            % = xlim; XL = XL*0.75; uiresume;'); %    pb5u =
+            % uicontrol(gcf,'Style','pushbutton','String','Shift
+            % Right','Position',[ss(3)*.8 1 ss(3)*.1
+            % ss(4)*.05],'Callback','XL = xlim; XL = XL+diff(XL)*.5;
+            % uiresume;'); %    pb5l =
+            % uicontrol(gcf,'Style','pushbutton','String','Shift
+            % Left','Position',[ss(3)*.6 1 ss(3)*.1
+            % ss(4)*.05],'Callback','XL = xlim; XL = XL-diff(XL)*.5;
+            % uiresume;');
+                pb7l = uicontrol(gcf,'Style','pushbutton','String','Instructions','units','normalized','Position',[.925 .125 .05 .05],'Callback','questdlg(instruct1,''Instructions'',''Done'',''Done''); uiresume;');
+                pbexit = uicontrol(gcf,'Style','pushbutton','String','Done','units','normalized','Position',[.925 .05 .05 .05],'Callback','button = 1; uiresume;');
+
+                uiwait(gcf)
+
+
+            end
+
+            MBV_temp_old = MBV_temp;
+            SBV_temp_old = SBV_temp;
+            DBV_temp_old = DBV_temp;
+
+            tbp = tRRi(good);
+            
+            MBV_tempf = MBV_temp(good);
+            SBV_tempf = SBV_temp(good);
+            DBV_tempf = DBV_temp(good);
+
+
+            button = 0;
+            bad = [];
+
+            PPf = (SBV_tempf-DBV_tempf)./MBV_tempf;
+
+            XL = [0 max(time(1:length(bv_f_temp)))];
+            XL2 = XL;
+
+            while button == 0
+
+                instruct1 = ['Remove any physiocal beats that are still being detected. Use remove button and place cross hairs over beat that is not correct. Once you are happy, press done'];
+
+                figure(1)
+            %    scrsz = get(0,'ScreenSize');
+        %        scrsz = get(0,'ScreenSize'); set(gcf,'Position',[1
+        %        scrsz(4)*.05 scrsz(3) scrsz(4)*.85])
+                clf
+                
+                subplot(3,1,1:2)    
+                    plot(time(1:length(bv_f_temp)),bv_f_temp, 'b', lw, lw_thin), hold on;
+                    plot(tbp,MBV_tempf,'ko', lw, lw_thick), 
+                    plot(tbp,SBV_tempf,'ro', lw, lw_thick), 
+                    plot(tbp,DBV_tempf,'ro', lw, lw_thick), hold off;
+                    scrollplot
+                    xlim(XL)
+                    xlabel('Time (s)', fs, fs_label)
+                    ylabel('Blood Flow Velocity  (cm/s)', fs, fs_label)
+                    ha = get(gcf,'CurrentAxes');
+                subplot(3,1,3)        
+                    plot(tbp,PPf,'ro-')
+                    ylabel('(Sys-Dia)/Avg  (unitless)', fs, fs_label)
+                    scrollplot;
+                    xlim(XL2)
+                    ha2 = get(gcf,'CurrentAxes');
+                ss = get(gcf,'Position');
+
+                pb1u = uicontrol(gcf,'Style','pushbutton','String','Remove','units','normalized','Position',[.925 .8 .05 .05],'Callback', ...
+                    '[x,y,butnum] = ginput(1); [mpt bad] = min(abs(tbp-x)); tbpold = tbp; MBV_tempfold = MBV_tempf; SBV_tempfold = SBV_tempf; DBV_tempfold = DBV_tempf; PPfold = PPf; tbp(bad) = []; MBV_tempf(bad) = []; SBV_tempf(bad) = []; DBV_tempf(bad) = []; PPf(bad)=[]; uiresume;');
+%                 pb2u =
+%                 uicontrol(gcf,'Style','pushbutton','String','Add','units','normalized','Position',[.925
+%                 .6 .05 .05],'Callback', ...
+%                     '[x, y] = ginput(1); x = x(end); [minpt addpt] =
+%                     min(abs(tbp-x)); tbpold = tbp; MBV_tempfold =
+%                     MBV_tempf; SBV_tempfold = SBV_tempf; DBV_tempfold =
+%                     DBV_tempf; PPfold = PPf; tbp(end+1) = tbp(addpt);
+%                     MBV_tempf(end+1) = MBV_temp(addpt); SBV_tempf(end+1)
+%                     = SBV_temp(addpt); DBV_tempf(end+1) =
+%                     DBV_temp(addpt); [tbp ix] = sort(tbp); MBV_tempf =
+%                     MBV_tempf(ix); SBV_tempf = SBV_tempf(ix); DBV_tempf =
+%                     DBV_tempf(ix);  PPf = SBV_tempf-DBV_tempf;
+%                     uiresume;');
+              
+ pb2u = uicontrol(gcf,'Style','pushbutton','String','Add','units','normalized','Position',[.925 .6 .05 .05],'Callback', ...
+                    '[x, y] = ginput(1); x = x(end); [minpt addpt] = min(abs(tRRi-x)); tbpold = tbp; MBV_tempfold = MBV_tempf; SBV_tempfold = SBV_tempf; DBV_tempfold = DBV_tempf; PPfold = PPf; tbp(end+1) = tRRi(addpt); MBV_tempf(end+1) = MBV_temp(addpt); SBV_tempf(end+1) = SBV_temp(addpt); DBV_tempf(end+1) = DBV_temp(addpt); [tbp ix] = sort(tbp); MBV_tempf = MBV_tempf(ix); SBV_tempf = SBV_tempf(ix); DBV_tempf = DBV_tempf(ix);  PPf = SBV_tempf-DBV_tempf; uiresume;');
+              
+pb3u = uicontrol(gcf,'Style','pushbutton','String','Undo','units','normalized','Position',[.925 .4 .05 .05],'Callback', ...
+                    'tbp = tbpold; MBV_tempf = MBV_tempfold; SBV_tempf = SBV_tempfold; DBV_tempf = DBV_tempfold; PPf = PPfold; uiresume;');
+            %    pb4u = uicontrol(gcf,'Style','pushbutton','String','Zoom
+            %    Out','Position',[ss(3)*.4 1 ss(3)*.1
+            %    ss(4)*.05],'Callback','XL = xlim; XL = XL*1.25;
+            %    uiresume;'); pb4l =
+            %    uicontrol(gcf,'Style','pushbutton','String','Zoom
+            %    In','Position',[ss(3)*.2 1 ss(3)*.1
+            %    ss(4)*.05],'Callback','XL = xlim; XL = XL*0.75;
+            %    uiresume;'); pb5u =
+            %    uicontrol(gcf,'Style','pushbutton','String','Shift
+            %    Right','Position',[ss(3)*.8 1 ss(3)*.1
+            %    ss(4)*.05],'Callback','XL = xlim; XL = XL+diff(XL)*.5;
+            %    uiresume;'); pb5l =
+            %    uicontrol(gcf,'Style','pushbutton','String','Shift
+            %    Left','Position',[ss(3)*.6 1 ss(3)*.1
+            %    ss(4)*.05],'Callback','XL = xlim; XL = XL-diff(XL)*.5;
+            %    uiresume;');
+                pb7l = uicontrol(gcf,'Style','pushbutton','String','Instructions','units','normalized','Position',[.925 .2 .05 .05],'Callback','questdlg(instruct1,''Instructions'',''Done'',''Done''); uiresume;');
+                pbexit = uicontrol(gcf,'Style','pushbutton','String','Done','units','normalized','Position',[.925 .1 .05 .05],'Callback','button = 1; uiresume;');
+                pbRG1u = uicontrol(gcf,'Style','pushbutton','String','Remove Group','Position',[ss(3)*.025 ss(4)*.7 ss(3)*.1 ss(4)*.05],'Callback','Remove_Group = 1; uiresume;');
+
+                uiwait(gcf)
+
+                
+                
+                   if Remove_Group > 0 
+        
+        
+        k = waitforbuttonpress;
+    point1 = get(gca,'CurrentPoint');    % button down detected
+    finalRect = rbbox;                   % return figure units
+    point2 = get(gca,'CurrentPoint');    % button up detected
+    point1 = point1(1,1:2);              % extract x and y
+    point2 = point2(1,1:2);
+    p1 = min(point1,point2);             % calculate locations
+    offset = abs(point1-point2);         % and dimensions
+    x = [p1(1) p1(1)+offset(1) p1(1)+offset(1) p1(1) p1(1)]; % is the time 
+    y = [p1(2) p1(2) p1(2)+offset(2) p1(2)+offset(2) p1(2)];
+    hold on
+    axis manual
+    fig = plot(x,y,'r','linewidth',2) ;
+    
+    Index_Start_Array=find(tbp<= min(x));
+    Index_end_Array  = find(tbp<= max(x));
+    
+    if  (isempty(Index_Start_Array)) ||  (isempty(Index_end_Array) )
+        
+        display('');
+        
+    else
+    Index_Start = Index_Start_Array(end);
+    Index_end = Index_end_Array(end);
+    
+ tbpold = tbp; MBV_tempfold = MBV_tempf; SBV_tempfold = SBV_tempf; DBV_tempfold = DBV_tempf; PPfold = PPf; 
+ tbp(Index_Start:Index_end) = []; 
+ MBV_tempf(Index_Start:Index_end) = []; SBV_tempf(Index_Start:Index_end) = []; DBV_tempf(Index_Start:Index_end) = []; PPf(Index_Start:Index_end)=[];
+ 
+        Remove_Group = 0;
+    end 
+    end
+                
+                
+                
+                XL = xlim(ha);
+                XL2 = xlim(ha2);
+
+            end
+
+            MBVold(:,l) = MBV(:,l);
+            SBVold(:,l) = SBV(:,l);
+            DBVold(:,l) = DBV(:,l);
+%             tbp=smooth(tbp);
+
+            %Take care of Edge case when you click twice and have repeating points
+            % Remove duplicate points and corresponding values
+            [tbp_unique, idx] = unique(tbp, 'stable');
+            MBV_tempf_unique = MBV_tempf(idx);
+            SBV_tempf_unique = SBV_tempf(idx);
+            DBV_tempf_unique = DBV_tempf(idx);
+
+            % Perform interpolation
+            MBV(:,l) = interp1(tbp_unique, MBV_tempf_unique, tRRi);
+            SBV(:,l) = interp1(tbp_unique, SBV_tempf_unique, tRRi);
+            DBV(:,l) = interp1(tbp_unique, DBV_tempf_unique, tRRi);
+
+        end
+
+
+    end
+    
+    close all;
+
+%% Section 10 
+    button = questdlg('Do you need to remove bad sections of BP?','BP Correction','Yes','No','Help','No');
+    if strcmp(button,'Yes')
+       disp('Performing drop filter...')
+    elseif strcmp(button,'No')
+       disp('Continue')
+    elseif strcmp(button,'Help')
+       disp('Use this to remove servos and physiocals from BP signal.')
+       quit
+    end
+
+    if strcmp(button,'Yes')
+        %Remove servocorrects from bp signal
+        PP = (SBP-DBP)./MBP;
+        stdPP = std(PP);
+        meanPP = nanmean(PP);
+        LPPthreshold=meanPP-2*stdPP;
+        UPPthreshold=meanPP+2*stdPP;
+        good = find(PP>=LPPthreshold & PP<=UPPthreshold);
+
+        button = 0;
+        while button == 0
+
+            instruct1 = ['Remove physiocals by looking for beats with reduced pulse pressure(PP). PP is the systolics - diastolics.  Adjust upper threshold (red line) with UThresh buttons (+ increases a little, ++ increases a lot, - decreases a little, -- decreases a lot). Adjust lower threshold (green) using the LThresh buttons. Once you are happy, press done'];
+
+            figure(7)
+            clf
+            scrsz = get(0,'ScreenSize');
+            set(gcf,'Position',[1 scrsz(4)*.05 scrsz(3) scrsz(4)*.85])
+        %    ss = get(gcf,'Position');
+
+            good = find(PP>=LPPthreshold & PP<=UPPthreshold);
+
+            clf
+            subplot(2,1,1)
+            plot(time(1:length(bp_f)),bp_f, 'b', lw, lw_thin), hold on;
+            plot(tRRi(good),MBP(good),'ko', lw, lw_thick), 
+            plot(tRRi(good),SBP(good),'ro', lw, lw_thick), 
+            plot(tRRi(good),DBP(good),'ro', lw, lw_thick), hold off;
+            axis tight
+            yl = ylim;
+            yl(1) = yl(1)-yl(2)*.05;
+            yl(2) = yl(2)+yl(2)*.05;
+            ylim(yl);
+            xlabel('Time (s)', fs, fs_label)
+            ylabel('Arterial Blood Pressure  (mmHg)', fs, fs_label)
+            scrollplot
+
+            subplot(2,1,2)
+            plot(time(1:length(PP)),PP, 'bo')
+            hold on
+            hlineU = refline(0,LPPthreshold);
+            set(hlineU,'Color','r')
+            hlineL = refline(0,UPPthreshold);
+            set(hlineL,'Color','g')
+            hold off
+            ylabel('Pulse Pressure  (mmHg)', fs, fs_label)
+
+            pb1u = uicontrol(gcf,'Style','pushbutton','String','UThresh+','units','normalized','Position',[.925 .9 .05 .05],'Callback', ...
+                'UPPthreshold=UPPthreshold+meanPP*0.1; uiresume;');
+            pb2u = uicontrol(gcf,'Style','pushbutton','String','UThresh-','units','normalized','Position',[.925 .8 .05 .05],'Callback', ...
+                'UPPthreshold=UPPthreshold-meanPP*0.1; uiresume;');
+            pb3u = uicontrol(gcf,'Style','pushbutton','String','UThresh++','units','normalized','Position',[.925 .7 .05 .05],'Callback', ...
+                'UPPthreshold=UPPthreshold+meanPP*0.5; uiresume;');
+            pb4u = uicontrol(gcf,'Style','pushbutton','String','UThresh--','units','normalized','Position',[.925 .6 .05 .05],'Callback', ...
+                'UPPthreshold=UPPthreshold-meanPP*0.5; uiresume;');
+            pb5u = uicontrol(gcf,'Style','pushbutton','String','LThresh+','units','normalized','Position',[.925 .5 .05 .05],'Callback', ...
+                'LPPthreshold=LPPthreshold+meanPP*0.1; uiresume;');
+            pb6u = uicontrol(gcf,'Style','pushbutton','String','LThresh-','units','normalized','Position',[.925 .4 .05 .05],'Callback', ...
+                'LPPthreshold=LPPthreshold-meanPP*0.1; uiresume;');
+            pb7u = uicontrol(gcf,'Style','pushbutton','String','LThresh++','units','normalized','Position',[.925 .3 .05 .05],'Callback', ...
+                'LPPthreshold=LPPthreshold+meanPP*0.5; uiresume;');
+            pb8u = uicontrol(gcf,'Style','pushbutton','String','LThresh--','units','normalized','Position',[.925 .2 .05 .05],'Callback', ...
+                'LPPthreshold=LPPthreshold-meanPP*0.5; uiresume;');
+        % %    pb4l = uicontrol(gcf,'Style','pushbutton','String','Zoom
+        % In','Position',[ss(3)*.2 1 ss(3)*.1 ss(4)*.05],'Callback','XL =
+        % xlim; XL = XL*0.75; uiresume;'); %    pb5u =
+        % uicontrol(gcf,'Style','pushbutton','String','Shift
+        % Right','Position',[ss(3)*.8 1 ss(3)*.1 ss(4)*.05],'Callback','XL
+        % = xlim; XL = XL+diff(XL)*.5; uiresume;'); %    pb5l =
+        % uicontrol(gcf,'Style','pushbutton','String','Shift
+        % Left','Position',[ss(3)*.6 1 ss(3)*.1 ss(4)*.05],'Callback','XL =
+        % xlim; XL = XL-diff(XL)*.5; uiresume;');
+            pb7l = uicontrol(gcf,'Style','pushbutton','String','Instructions','units','normalized','Position',[.925 .125 .05 .05],'Callback','questdlg(instruct1,''Instructions'',''Done'',''Done''); uiresume;');
+            pbexit = uicontrol(gcf,'Style','pushbutton','String','Done','units','normalized','Position',[.925 .05 .05 .05],'Callback','button = 1; uiresume;');
+
+            uiwait(gcf)
+
+
+        end
+
+        MBP_old = MBP;
+        SBP_old = SBP;
+        DBP_old = DBP;
+
+        tbp = tRRi(good);
+        MBPf = MBP(good);
+        SBPf = SBP(good);
+        DBPf = DBP(good);
+
+Remov_Group = 0;
+        button = 0;
+        bad = [];
+
+        PPf = (SBPf-DBPf)./MBPf;
+
+        XL = [0 max(time(1:length(bp_f)))];
+        XL2 = XL;
+
+        while button == 0
+
+            instruct1 = ['Remove any physiocal beats that are still being detected. Use remove button and place cross hairs over beat that is not correct. Once finished, hit Done.'];
+
+            figure(8)
+        %    scrsz = get(0,'ScreenSize');
+            scrsz = get(0,'ScreenSize');
+            set(gcf,'Position',[1 scrsz(4)*.05 scrsz(3) scrsz(4)*.85])
+            clf
+            subplot(3,1,1:2)    
+                plot(time(1:length(bp_f)),bp_f, 'b', lw, lw_thin), hold on;
+                plot(tbp,MBPf,'ko', lw, lw_thick), 
+                plot(tbp,SBPf,'ro', lw, lw_thick), 
+                plot(tbp,DBPf,'ro', lw, lw_thick), hold off;
+                scrollplot;
+                xlim(XL)
+                ha = get(gcf,'CurrentAxes');
+            subplot(3,1,3)        
+                plot(tbp,PPf,'ro-')
+                ylabel('HR')
+                scrollplot;
+                xlim(XL2)             
+                ha2 = get(gcf,'CurrentAxes');
+            ss = get(gcf,'Position');
+
+            pb1u = uicontrol(gcf,'Style','pushbutton','String','Remove','units','normalized','Position',[.925 .8 .05 .05],'Callback', ...
+                '[x,y,butnum] = ginput(1); [mpt bad] = min(abs(tbp-x)); tbpold = tbp; MBPfold = MBPf; SBPfold = SBPf; DBPfold = DBPf; PPfold = PPf; tbp(bad) = []; MBPf(bad) = []; SBPf(bad) = []; DBPf(bad) = []; PPf(bad)=[]; uiresume;');
+            pb2u = uicontrol(gcf,'Style','pushbutton','String','Add','units','normalized','Position',[.925 .6 .05 .05],'Callback', ...
+                '[x, y] = ginput(1); x = x(end); [minpt addpt] = min(abs(tRRi-x)); tbpold = tbp; MBPfold = MBPf; SBPfold = SBPf; DBPfold = DBPf; PPfold = PPf; tbp(end+1) = tRRi(addpt); MBPf(end+1) = MBP(addpt); SBPf(end+1) = SBP(addpt); DBPf(end+1) = DBP(addpt); [tbp ix] = sort(tbp); MBPf = MBPf(ix); SBPf = SBPf(ix); DBPf = DBPf(ix);  PPf = SBPf-DBPf; uiresume;');
+            pb3u = uicontrol(gcf,'Style','pushbutton','String','Undo','units','normalized','Position',[.925 .4 .05 .05],'Callback', ...
+                'tbp = tbpold; MBPf = MBPfold; SBPf = SBPfold; DBPf = DBPfold; PPf = PPfold; uiresume;');
+        %    pb4u = uicontrol(gcf,'Style','pushbutton','String','Zoom
+        %    Out','Position',[ss(3)*.4 1 ss(3)*.1 ss(4)*.05],'Callback','XL
+        %    = xlim; XL = XL*1.25; uiresume;'); pb4l =
+        %    uicontrol(gcf,'Style','pushbutton','String','Zoom
+        %    In','Position',[ss(3)*.2 1 ss(3)*.1 ss(4)*.05],'Callback','XL
+        %    = xlim; XL = XL*0.75; uiresume;'); pb5u =
+        %    uicontrol(gcf,'Style','pushbutton','String','Shift
+        %    Right','Position',[ss(3)*.8 1 ss(3)*.1
+        %    ss(4)*.05],'Callback','XL = xlim; XL = XL+diff(XL)*.5;
+        %    uiresume;'); pb5l =
+        %    uicontrol(gcf,'Style','pushbutton','String','Shift
+        %    Left','Position',[ss(3)*.6 1 ss(3)*.1
+        %    ss(4)*.05],'Callback','XL = xlim; XL = XL-diff(XL)*.5;
+        %    uiresume;');
+            pb7l = uicontrol(gcf,'Style','pushbutton','String','Instructions','units','normalized','Position',[.925 .2 .05 .05],'Callback','questdlg(instruct1,''Instructions'',''Done'',''Done''); uiresume;');
+            pbexit = uicontrol(gcf,'Style','pushbutton','String','Done','units','normalized','Position',[.925 .1 .05 .05],'Callback','button = 1; uiresume;');
+            pbRG1u = uicontrol(gcf,'Style','pushbutton','String','Remove Group','Position',[ss(3)*.025 ss(4)*.7 ss(3)*.1 ss(4)*.05],'Callback','Remove_Group = 1; uiresume;');
+
+            uiwait(gcf)
+
+            
+            if Remove_Group > 0 
+        
+        
+        k = waitforbuttonpress;
+    point1 = get(gca,'CurrentPoint');    % button down detected
+    finalRect = rbbox;                   % return figure units
+    point2 = get(gca,'CurrentPoint');    % button up detected
+    point1 = point1(1,1:2);              % extract x and y
+    point2 = point2(1,1:2);
+    p1 = min(point1,point2);             % calculate locations
+    offset = abs(point1-point2);         % and dimensions
+    x = [p1(1) p1(1)+offset(1) p1(1)+offset(1) p1(1) p1(1)]; % is the time 
+    y = [p1(2) p1(2) p1(2)+offset(2) p1(2)+offset(2) p1(2)];
+    hold on
+    axis manual
+    fig = plot(x,y,'r','linewidth',2) ;
+    
+    Index_Start_Array=find(tbp<= min(x));
+    Index_end_Array  = find(tbp<= max(x));
+    
+    if  (isempty(Index_Start_Array)) ||  (isempty(Index_end_Array) )
+        
+        display('');
+        
+    else
+    Index_Start = Index_Start_Array(end);
+    Index_end = Index_end_Array(end);
+    
+    tbpold = tbp; MBPfold = MBPf; SBPfold = SBPf; DBPfold = DBPf; PPfold = PPf; 
+tbp(Index_Start:Index_end) = []; MBPf(Index_Start:Index_end) = []; SBPf(Index_Start:Index_end) = []; DBPf(Index_Start:Index_end) = []; PPf(Index_Start:Index_end)=[];
+ 
+        Remove_Group = 0;
+    end 
+ end
+            
+            
+            
+            
+            XL = xlim(ha);
+            XL2 = xlim(ha2);
+
+        end
+        
+        bad = find(diff(tbp)==0);
+        
+        tbp(bad) = [];
+        MBPf(bad) = [];
+        SBPf(bad) = [];
+        DBPf(bad) = [];
+%        tbp=smooth(tbp);
+        MBP = interp1(tbp,MBPf,tRRi);
+        SBP = interp1(tbp,SBPf,tRRi);
+        DBP = interp1(tbp,DBPf,tRRi);
+
+    end
+
+close all;    
+% MBPi = interp1(tRRi,MBP,ti,'linear','extrap'); SBPi =
+% interp1(tRRi,SBP,ti,'linear','extrap'); DBPi =
+% interp1(tRRi,DBP,ti,'linear','extrap');
+%% the pause add to make the script run fatser since the pc runnning the scrip has only 2 GB
+
+% %% Section 11: Calculate CO2 Peaks % Updated 07/2015/2016 to fix issue
+% with peaks during hyperventilation not % being recognized.
+% 
+% % CO2 = co2;
+% 
+% points = ceil(1.5*SR); thresh = round(max(CO2)/2);
+% 
+% %Low pass filter the CO2 signal button = 0; XL2 = [0 t(end)]; XL3 = XL2;
+% basefilter1 = 0; k=1;
+% 
+% 
+%     while button==0
+%         
+%         instruct1 = ['Use filter to smooth CO2 signal. Press LPF button
+%         to smooth signal and improve peak detection. You can press the
+%         button several times to improve smoothing. Smooth until the
+%         majority of peaks are correctly detected. Once you are happy,
+%         press done'];
+%         
+%         figure(1) scrsz = get(0,'ScreenSize'); set(gcf,'Position',[1
+%         scrsz(4)*.05 scrsz(3) scrsz(4)*.85]) clf [loc,iCO2i2] =
+%         findpeaks(CO2,'MinPeakHeight',10,'MinPeakDistance',150);
+%         
+%         % find the location of the biggest drop in CO2 or
+%         hyperventilation % Usually occurs after 3 minutes in the data
+%         
+% %         loc2 =  find( 300 == tco2, 1, 'first' );
+%         [loc1_e loc2] =  min(abs(tco2-300)); clear loc1_e
+%                 iCO2i = Peaksmsa(CO2,points,thresh); tCO2i = tco2(iCO2i);
+%                 etCO2 = []; tetCO2 = []; ietCO2 = [];
+%         
+%         
+%                 for i = 1:(length(iCO2i)-1)
+%                     [etCO2(i) temp] = max(CO2(iCO2i(i):iCO2i(i+1))); %
+%                     temp = find((CO2(iCO2i(i):iCO2i(i+1))) == etCO2(i));
+%                     %         temp = temp+iCO2i(i); ietCO2(i) =
+%                     temp(1)+iCO2i(i); tetCO2(i) = tco2(ietCO2(i)); %
+%                     if etCO2(i) < 20 %             etCO2(i) = NaN; %
+%                     end
+%                 end
+%         loc3 = find(iCO2i2 >loc2); iCO2i3 =iCO2i2(loc3);
+% 
+%         new_ietCO2 = sort([ietCO2, iCO2i3],'ascend' ); ietCO2 =
+%         unique(new_ietCO2);
+
+%% Section 11 calculate CO2 Peaks
+% Updated 07/2015/2016 to fix issue with peaks during hyperventilation not
+% being recognized.
+
+% Construct a questdlg with three options
+choice = questdlg('Is there any hyperventilation?', ...
+	'CO2 Peak Detection', ...
+	'Yes','No','No');
+% Handle response
+switch choice
+    case 'Yes'
+        hyper=1;
+    case 'No'
+        hyper=0;
+end
+
+clear choice
+
+% CO2 = co2;
+
+points = ceil(1.5*SR);
+thresh = round(max(CO2)/2);
+
+%Low pass filter the CO2 signal
+button = 0;
+XL2 = [0 t(end)];
+XL3 = XL2;
+basefilter1 = 0;
+k=1;
+
+
+    while button==0
+        
+        instruct1 = ['Use filter to smooth CO2 signal. Press LPF button to smooth signal and improve peak detection. You can press the button several times to improve smoothing. Smooth until the majority of peaks are correctly detected. Once you are happy, press done.'];
+        
+        figure(1)
+        scrsz = get(0,'ScreenSize');
+        set(gcf,'Position',[1 scrsz(4)*.05 scrsz(3) scrsz(4)*.85])
+        clf
+      if hyper==1;
+        [loc,iCO2i2] =  findpeaks(CO2,'MinPeakHeight',10,'MinPeakDistance',round((SR)/100)*15);
+        
+        % find the location of the biggest drop in CO2 or hyperventilation
+        % Usually occurs after 3 minutes in the data
+
+           %Question added since hyperventilation occurs at diff times for
+           %diff protocols       BS 3/15/18
+           hyp_min=inputdlg('At what minute does hyperventilation start:','Min of hyperventilation',1,{'5'});
+           hyp_min=60*str2double(hyp_min);
+           
+%         loc2 =  find( 300 == tco2, 1, 'first' );
+        loc2 =  find( tco2' >= hyp_min , 1, 'first' );
+        
+                iCO2i = Peaksmsa(CO2,points,thresh);
+                tCO2i = tco2(iCO2i);
+                etCO2 = [];
+                tetCO2 = [];
+                ietCO2 = [];
+        
+        
+                for i = 1:(length(iCO2i)-1)
+                    [etCO2(i) temp] = max(CO2(iCO2i(i):iCO2i(i+1)));
+                    %         temp = find((CO2(iCO2i(i):iCO2i(i+1))) ==
+                    %         etCO2(i)); temp = temp+iCO2i(i);
+                    ietCO2(i) = temp(1)+iCO2i(i);
+                    tetCO2(i) = tco2(ietCO2(i));
+                    %         if etCO2(i) < 20
+                    %             etCO2(i) = NaN;
+                    %         end
+                end
+        loc3 = find (iCO2i2 >loc2);
+        iCO2i3 =iCO2i2(loc3);
+
+        new_ietCO2 = sort([ietCO2, iCO2i3],'ascend' );
+        ietCO2 = unique(new_ietCO2);
+      elseif hyper==0;
+          iCO2i = Minsmsa(CO2,points,thresh);
+                tCO2i = tco2(iCO2i);
+                etCO2 = [];
+                tetCO2 = [];
+                ietCO2 = [];    
+             for i = 1:(length(iCO2i)-1)
+                [etCO2(i) temp] = max(CO2(iCO2i(i):iCO2i(i+1)));
+
+                    ietCO2(i) = temp(1)+iCO2i(i);
+                    tetCO2(i) = tco2(ietCO2(i));
+
+             end
+      end
+       
+     tco2 = tco2-tco2(1);
+        subplot(3,1,1:2)
+        plot(tco2,CO2);
+        hold on
+        plot(tco2(ietCO2),CO2(ietCO2),'ro')
+        hold off
+        ha2 = get(gcf,'CurrentAxes');
+        ylabel('CO2 (mmHg)')
+        scrollplot;
+        xlim(XL2);
+
+        subplot(3,1,3)
+        plot(tco2(ietCO2),CO2(ietCO2),'bo-');
+        ha2 = get(gcf,'CurrentAxes');
+        ylabel('CO2 (mmHg)')
+        scrollplot;
+        xlim(XL2);
+
+        pb3u = uicontrol(gcf,'Style','pushbutton','String','LPF','units','normalized','Position',[.925 .76 .05 .05],'Callback','basefilter1 = 1; uiresume;');
+    %    pb3l =
+    %    uicontrol(gcf,'Style','pushbutton','String','LPF','units','normalized','Position',[.925
+    %    .275 .05 .05],'Callback','basefilter2 = 1; uiresume;');
+        pb7l = uicontrol(gcf,'Style','pushbutton','String','Instructions','units','normalized','Position',[.925 .3 .05 .05],'Callback','questdlg(instruct1,''Instructions'',''Done'',''Done''); uiresume;');
+        pbexit = uicontrol(gcf,'Style','pushbutton','String','Done','units','normalized','Position',[.9 .01 .1 .05],'Callback','button = 1; uiresume;');
+
+        uiwait(gcf)
+
+        if basefilter1 == 1
+            CO2old = CO2;
+            npt = round(SR/10);
+            CO2 = fastsmooth(CO2,npt*k);
+            basefilter1 = 0;
+            k=k+1;
+       end
+
+        XL2 = xlim(ha2);
+
+    end
+
+    %determine best threshold for detection
+
+    Thresh = thresh;
+    Points = points;
+
+    ietCO2_old = ietCO2;
+
+    button = 0;
+    while button == 0
+
+        instruct1 = ['This is a simple threshold cutoff. Any end tidal values below the line will be removed. Once finished, hit Done'];
+
+        figure(1)
+        clf
+        scrsz = get(0,'ScreenSize');
+        set(gcf,'Position',[1 scrsz(4)*.05 scrsz(3) scrsz(4)*.85])
+    %    ss = get(gcf,'Position');
+
+        good = find(CO2(ietCO2)>thresh);
+        ietCO2_plot = ietCO2(good);
+
+        clf
+        plot(tco2,CO2, 'b', lw, lw_thin), hold on;
+        plot(tco2(ietCO2_plot),CO2(ietCO2_plot),'ro')
+        refline(0,thresh);
+        axis tight
+        yl = ylim;
+        yl(1) = yl(1)-yl(2)*.05;
+        yl(2) = yl(2)+yl(2)*.05;
+        ylim(yl);
+        xlabel('Time (s)', fs, fs_label)
+        ylabel('CO2  (mmHg)', fs, fs_label)
+        scrollplot
+
+        pb1u = uicontrol(gcf,'Style','pushbutton','String','Thresh+','units','normalized','Position',[.925 .9 .05 .05],'Callback', ...
+            'thresh=thresh+Thresh*0.05; uiresume;');
+        pb2u = uicontrol(gcf,'Style','pushbutton','String','Thresh-','units','normalized','Position',[.925 .8 .05 .05],'Callback', ...
+            'thresh=thresh-Thresh*0.05; uiresume;');
+        pb3u = uicontrol(gcf,'Style','pushbutton','String','Thresh++','units','normalized','Position',[.925 .7 .05 .05],'Callback', ...
+            'thresh=thresh+Thresh*0.2; uiresume;');
+        pb4u = uicontrol(gcf,'Style','pushbutton','String','Thresh--','units','normalized','Position',[.925 .6 .05 .05],'Callback', ...
+            'thresh=thresh-Thresh*0.2; uiresume;');
+    %     pb5u =
+    %     uicontrol(gcf,'Style','pushbutton','String','Points+','units','normalized','Position',[.925
+    %     .5 .05 .05],'Callback', ...
+    %         'points=points+Points*0.1; uiresume;');
+    %     pb6u =
+    %     uicontrol(gcf,'Style','pushbutton','String','Points-','units','normalized','Position',[.925
+    %     .4 .05 .05],'Callback', ...
+    %         'points=points-Points*0.1; uiresume;');
+    %     pb7u =
+    %     uicontrol(gcf,'Style','pushbutton','String','Points++','units','normalized','Position',[.925
+    %     .3 .05 .05],'Callback', ...
+    %         'points=points+Points*0.5; uiresume;');
+    %     pb8u =
+    %     uicontrol(gcf,'Style','pushbutton','String','Points--','units','normalized','Position',[.925
+    %     .2 .05 .05],'Callback', ...
+    %         'points=points-Points*0.5; uiresume;');
+    % %    pb4l = uicontrol(gcf,'Style','pushbutton','String','Zoom
+    % In','Position',[ss(3)*.2 1 ss(3)*.1 ss(4)*.05],'Callback','XL = xlim;
+    % XL = XL*0.75; uiresume;'); %    pb5u =
+    % uicontrol(gcf,'Style','pushbutton','String','Shift
+    % Right','Position',[ss(3)*.8 1 ss(3)*.1 ss(4)*.05],'Callback','XL =
+    % xlim; XL = XL+diff(XL)*.5; uiresume;'); %    pb5l =
+    % uicontrol(gcf,'Style','pushbutton','String','Shift
+    % Left','Position',[ss(3)*.6 1 ss(3)*.1 ss(4)*.05],'Callback','XL =
+    % xlim; XL = XL-diff(XL)*.5; uiresume;');
+        pb7l = uicontrol(gcf,'Style','pushbutton','String','Instructions','units','normalized','Position',[.925 .125 .05 .05],'Callback','questdlg(instruct1,''Instructions'',''Done'',''Done''); uiresume;');
+        pbexit = uicontrol(gcf,'Style','pushbutton','String','Done','units','normalized','Position',[.925 .05 .05 .05],'Callback','button = 1; uiresume;');
+
+        uiwait(gcf)
+
+
+    end
+
+    ietCO2 = ietCO2(good);
+
+
+    button = 0;
+
+        figure(1)
+        scrsz = get(0,'ScreenSize');
+        set(gcf,'Position',[1 scrsz(4)*.05 scrsz(3) scrsz(4)*.85])
+        
+        % Define Key Press Function
+        set(gcf, 'WindowKeyPressFcn', @keyPressCallback);
+        
+       Mul2 = max(CO2(:)) / max(MBV(:));
+    
+    while button == 0
+
+        instruct1 = 'Add or remove peak detections points till CO2 signal is correctly peak detected. Once finished, hit Done.';
+
+        figure(1)
+        clf
+        
+        % Set Key Press Callback
+        set(gcf, 'WindowKeyPressFcn', @keyPressCallbackCO2Select);
+    
+        subplot(3,1,1:2)    
+            plot(tco2,CO2, 'b', lw, lw_thin), hold on;
+            plot(tRRi,MBV*Mul2,'k-');
+            plot(tco2(ietCO2),CO2(ietCO2),'ro'), hold off;
+            
+            scrollplot
+            xlim(XL)
+            ha = get(gcf,'CurrentAxes');
+        subplot(3,1,3)        
+            plot(tco2(ietCO2),CO2(ietCO2))
+            ylabel('ETCO2')
+            scrollplot;
+            ha2 = get(gcf,'CurrentAxes');
+
+            ss = get(gcf,'Position');
+
+        pb1u = uicontrol(gcf,'Style','pushbutton','String','Remove (r)','units','normalized','Position',[.925 .7 .05 .05],'Callback', ...
+            '[x, y] = ginput(1); x = x(end); [mpt bad] = min(abs(tco2(ietCO2)-x)); ietCO2old = ietCO2; ietCO2(bad) = []; uiresume;');
+        pb2u = uicontrol(gcf,'Style','pushbutton','String','Add (a)','units','normalized','Position',[.925 .6 .05 .05],'Callback', ...
+            '[x, y] = ginput(1); x = round(x(end).*SR); [mpt good] = max(CO2(x-round(SR):x+round(SR))); ietCO2old = ietCO2; ietCO2(end+1) = (good + x-round(SR)); ietCO2 = sort(ietCO2); ietCO2 = unique(ietCO2); uiresume;');
+        pb4u = uicontrol(gcf,'Style','pushbutton','String','Add Exact (e)','units','normalized','Position',[.925 .5 .05 .05],'Callback', ...
+            '[x, y] = ginput(1); x = round(x(end).*SR); [mpt good] = max(CO2(x-(SR/200):x+(SR/200))); ietCO2old = ietCO2; ietCO2(end+1) = (good + x-(SR/200)); ietCO2 = sort(ietCO2); ietCO2 = unique(ietCO2); uiresume;');
+        pb3u = uicontrol(gcf,'Style','pushbutton','String','Undo (u)','units','normalized','Position',[.925 .4 .05 .05],'Callback', ...
+            'ietCO2 = ietCO2old; uiresume;');
+    %    pb4u = uicontrol(gcf,'Style','pushbutton','String','Zoom
+    %    Out','Position',[ss(3)*.4 1 ss(3)*.1 ss(4)*.05],'Callback','XL =
+    %    xlim; XL = XL*1.25; uiresume;'); pb4l =
+    %    uicontrol(gcf,'Style','pushbutton','String','Zoom
+    %    In','Position',[ss(3)*.2 1 ss(3)*.1 ss(4)*.05],'Callback','XL =
+    %    xlim; XL = XL*0.75; uiresume;'); pb5u =
+    %    uicontrol(gcf,'Style','pushbutton','String','Shift
+    %    Right','Position',[ss(3)*.8 1 ss(3)*.1 ss(4)*.05],'Callback','XL =
+    %    xlim; XL = XL+diff(XL)*.5; uiresume;'); pb5l =
+    %    uicontrol(gcf,'Style','pushbutton','String','Shift
+    %    Left','Position',[ss(3)*.6 1 ss(3)*.1 ss(4)*.05],'Callback','XL =
+    %    xlim; XL = XL-diff(XL)*.5; uiresume;');
+    
+    
+
+    
+        pb7l = uicontrol(gcf,'Style','pushbutton','String','Instructions (i)','units','normalized','Position',[.925 .2 .05 .05],'Callback','questdlg(instruct1,''Instructions'',''Done'',''Done''); uiresume;');
+        pbexit = uicontrol(gcf,'Style','pushbutton','String','Done (d)','units','normalized','Position',[.925 .1 .05 .05],'Callback','button = 1; uiresume;');
+
+        uiwait(gcf)
+
+        ha = get(gcf,'CurrentAxes');
+        XL = xlim(ha);
+
+    end
+
+tetCO2 = tco2(ietCO2);
+etCO2 = CO2(ietCO2);
+good = find(~isnan(etCO2));
+ietCO2 = ietCO2(good);
+etCO2 = etCO2(good);
+tetCO2 = tetCO2(good);
+
+close all;
+%% the pause added to make the script run faster since the pc runnning the script has only 2 GB
+%% Plotting section 12-A %temp
+ normalizing_time ;normalizing_Index ;
+% MCA1_base_line; MCA2_base_line; BP_base_line ;
+start = startime;
+stop =endtime;
+    baseinterest = find(tRRi>=t(normalizing_Index(1)) & tRRi<=t(normalizing_Index(2)));
+    
+    MBV_mean = nanmean(MBV(baseinterest,:));
+    baseinterest = find(t>=t(normalizing_Index(1)) & t<=t(normalizing_Index(1)));
+    BV_mean = nanmean(BV(normalizing_Index(1):normalizing_Index(2),:));
+    bv_f_mean = nanmean(BV(normalizing_Index(1):normalizing_Index(2),:));
+% Normalize Flow signals start = startime; stop =endtime;
+%     baseinterest = find(tRRi>=start(1) & tRRi<=stop(1)); MBV_mean =
+%     nanmean(MBV(baseinterest,:)); baseinterest = find(t>=start(1) &
+%     t<=stop(1)); BV_mean = nanmean(BV(baseinterest,:)); bv_f_mean =
+%     nanmean(BV(baseinterest,:));
+% 
+% 
+
+    BP_mean = nanmean(BP(normalizing_Index(1):normalizing_Index(2)));
+  BP = (BP./BP_mean).*100;
+% elseif strcmp(button,'Help')
+%    disp('Sorry, no help available')
+% 
+% end
+     if exist('Carotid')
+    Carotid_clean = bv_f(:,end);
+    M_Carotid_Clean =MBV(:,end);
+    S_Carotid_Clean =SBV(:,end);
+    D_Carotid_Clean =DBV(:,end);
+     end
+     % we should remove normalizing
+for conk = 1:num_artery 
+BV_norm(:,conk) = (BV(:,conk)./BV_mean(conk)).*100;
+MBV_norm(:,conk) = (MBV(:,conk)./MBV_mean(conk)).*100;
+SBV_norm(:,conk) = (SBV(:,conk)./MBV_mean(conk)).*100;
+DBV_norm(:,conk) = (DBV(:,conk)./MBV_mean(conk)).*100;
+bv_f_norm(:,conk) = (bv_f(:,conk)./bv_f_mean(conk)).*100;
+
+end
+%% 12-B Matching all signal length %temp
+BVcm =BV;
+MBVcm=MBV;
+SBVcm=SBV;
+DBVcm=DBV;
+ikp = find((t>=tRRi(1))&(t<=tRRi(end))); 
+t_before = t;
+t = t(ikp);
+BP = BP(ikp);
+BV = BV_norm(ikp,:);
+BVcm_int = BVcm(ikp,:);    %added by BS, never indicated BVcm of interest only BV
+ECG=ECG(ikp);              %added by BS, to change ecg to ecg with area of interest
+MBV = MBV_norm;
+SBV = SBV_norm;
+DBV = DBV_norm;
+bv_f_ikp = bv_f(ikp,:);
+bv_f_norm_ikp = bv_f_norm(ikp,:);
+bp_f = bp_f(ikp);
+%  if exist('Carotid')
+% Carotid_clean =Carotid_clean(ikp); Carotid_clean =
+% interp1(t,Carotid_clean,ti,'linear');
+%  M_Carotid_Clean =interp1(t,M_Carotid_Clean,ti,'linear');
+%     S_Carotid_Clean =interp1(t,S_Carotid_Clean,ti,'linear');
+%     D_Carotid_Clean =interp1(t,D_Carotid_Clean,ti,'linear');
+%  end
+% newSR = 100; %Desired sampling rate to be resampled to R =
+% round(SR/newSR); ti = decimate(t,R,10,'FIR');
+%% 12-D interpolation 100 HZ %temp
+% re-interpolation over 100 HZ
+
+if SR == 100;
+    
+    ti = 0:.01:t(end);
+%   ti = t(1):.01:t(end);
+
+     if exist('Carotid')
+    Carotid_clean =Carotid_clean(ikp);
+    Carotid_clean = interp1(t,Carotid_clean,ti,'linear');
+     M_Carotid_Cleani =interp1(tRRi,M_Carotid_Clean,ti,'linear');
+        S_Carotid_Cleani =interp1(tRRi,S_Carotid_Clean,ti,'linear');
+        D_Carotid_Cleani =interp1(tRRi,D_Carotid_Clean,ti,'linear');
+     end
+    SRi = 1/mean(diff(ti)); %Determine new sample rate
+    BPi = interp1(t,bp_f,ti,'linear');
+    BVi = interp1(t,bv_f_norm_ikp,ti,'linear');
+    ECGi = interp1(t,ECG,ti,'linear');
+    MBPi = interp1(tRRi,MBP,ti,'linear');
+    SBPi = interp1(tRRi,SBP,ti,'linear');
+    DBPi = interp1(tRRi,DBP,ti,'linear');
+
+    for coni = 1:num_artery 
+        MBVi(:,coni) = interp1(tRRi,MBV(:,coni),ti,'linear');
+        SBVi(:,coni) = interp1(tRRi,SBV(:,coni),ti,'linear');
+        DBVi(:,coni) = interp1(tRRi,DBV(:,coni),ti,'linear');
+        MBVicm(:,coni) = MBVi(:,coni)./100*BV_mean(coni);
+        SBVicm(:,coni) = SBVi(:,coni)./100*BV_mean(coni);
+        DBVicm(:,coni) = DBVi(:,coni)./100*BV_mean(coni);
+    end
+    RRii = interp1(tRRi,RRi,ti,'linear');
+    CO2i = interp1(tetCO2,etCO2,ti,'linear');
+
+    ti = ti - ti(1);
+
+elseif SR == 1000;
+    
+    ti = t;    
+
+    if exist('Carotid')
+    Carotid_clean =Carotid_clean(ikp);
+    Carotid_clean = interp1(t,Carotid_clean,ti,'linear');
+     M_Carotid_Cleani =interp1(tRRi,M_Carotid_Clean,ti,'linear');
+        S_Carotid_Cleani =interp1(tRRi,S_Carotid_Clean,ti,'linear');
+        D_Carotid_Cleani =interp1(tRRi,D_Carotid_Clean,ti,'linear');
+     end
+    SRi = 1/mean(diff(ti)); %Determine new sample rate
+    BPi = interp1(t,bp_f,ti,'linear');
+    BVi = interp1(t,bv_f_norm_ikp,ti,'linear');
+    ECGi = interp1(t,ECG,ti,'linear');
+    MBPi = interp1(tRRi,MBP,ti,'linear');
+    SBPi = interp1(tRRi,SBP,ti,'linear');
+    DBPi = interp1(tRRi,DBP,ti,'linear');
+
+    for coni = 1:num_artery 
+        MBVi(:,coni) = interp1(tRRi,MBV(:,coni),ti,'linear');
+        SBVi(:,coni) = interp1(tRRi,SBV(:,coni),ti,'linear');
+        DBVi(:,coni) = interp1(tRRi,DBV(:,coni),ti,'linear');
+        MBVicm(:,coni) = MBVi(:,coni)./100*BV_mean(coni);
+        SBVicm(:,coni) = SBVi(:,coni)./100*BV_mean(coni);
+        DBVicm(:,coni) = DBVi(:,coni)./100*BV_mean(coni);
+    end
+    RRii = interp1(tRRi,RRi,ti,'linear');
+    CO2i = interp1(tetCO2,etCO2,ti,'linear');
+     ti = ti - ti(1);
+     
+elseif SR == 2000;
+    
+    %ti = t;
+    ti = 0:.001:t(end);
+
+    if exist('Carotid')
+    Carotid_clean =Carotid_clean(ikp);
+    Carotid_clean = interp1(t,Carotid_clean,ti,'linear');
+     M_Carotid_Cleani =interp1(tRRi,M_Carotid_Clean,ti,'linear');
+        S_Carotid_Cleani =interp1(tRRi,S_Carotid_Clean,ti,'linear');
+        D_Carotid_Cleani =interp1(tRRi,D_Carotid_Clean,ti,'linear');
+     end
+    SRi = 1/mean(diff(ti)); %Determine new sample rate
+    BPi = interp1(t,bp_f,ti,'linear');
+    BVi = interp1(t,bv_f_norm_ikp,ti,'linear');
+    ECGi = interp1(t,ECG,ti,'linear');
+    MBPi = interp1(tRRi,MBP,ti,'linear');
+    SBPi = interp1(tRRi,SBP,ti,'linear');
+    DBPi = interp1(tRRi,DBP,ti,'linear');
+
+    for coni = 1:num_artery 
+        MBVi(:,coni) = interp1(tRRi,MBV(:,coni),ti,'linear');
+        SBVi(:,coni) = interp1(tRRi,SBV(:,coni),ti,'linear');
+        DBVi(:,coni) = interp1(tRRi,DBV(:,coni),ti,'linear');
+        MBVicm(:,coni) = MBVi(:,coni)./100*BV_mean(coni);
+        SBVicm(:,coni) = SBVi(:,coni)./100*BV_mean(coni);
+        DBVicm(:,coni) = DBVi(:,coni)./100*BV_mean(coni);
+    end
+    RRii = interp1(tRRi,RRi,ti,'linear');
+    CO2i = interp1(tetCO2,etCO2,ti,'linear');
+     ti = ti - ti(1);
+end
+
+%% plotting in Percent 
+txtfontsize= 11;
+t_name1 = ' ' ;
+t_name2 = ' ' ;
+
+figure(1)
+clf
+
+% Set default figure size to near maximum of screen size
+scrsz = get(0,'ScreenSize');
+position_default = [0.01*scrsz(3) 0.07*scrsz(4) 0.98*scrsz(3) 0.85*scrsz(4)];
+set(gcf,'position',position_default)
+
+%slashes = findstr(infile,'\');
+slashes = infile;
+plot_title = [infile ' (Original Waveforms) analyzed  ' datestr(now)]; 
+
+% Plot parameters
+fs = 'fontsize';            % save fontsize field property
+fs_title = 14;              % fontsize for titles
+fs_label = 12;              % fontsize for axis labels
+lw = 'LineWidth';           % save linewidth field property
+lw_thin = 0.3;              % linewidth for thin lines
+lw_thick = 2;               % linewidth for thicker lines
+ms = 'markersize';          % save markersize field property
+ms_large = 10;              % markersize for large points
+  k =num_artery+4;
+subplot(k,1,1)
+    plot(t,bp_f, 'b', lw, lw_thin), hold on;
+    plot(tRRi,MBP,'k', lw, lw_thick), 
+    plot(tRRi,SBP,'r', lw, lw_thick), 
+    plot(tRRi,DBP,'r', lw, lw_thick), hold off;
+   
+    axis tight
+    yl = ylim;
+    yl(1) = yl(1)-yl(2)*.05;
+    yl(2) = yl(2)+yl(2)*.05;
+    ylim(yl);
+%    xlabel('Time (s)', fs, fs_label)
+    ylabel({'Cerebral';'Blood Pressure';'(mmHg)'}, fs, fs_label)
+    title(plot_title, fs, fs_title)
+    
+    for figcont = 1:num_artery
+subplot(k,1,figcont+1)
+    plot(t,bv_f_norm_ikp(:,figcont), 'g', lw, lw_thin), hold on;
+    plot(tRRi,MBV(:,figcont),'k', lw, lw_thick), 
+    plot(tRRi,SBV(:,figcont),'r', lw, lw_thick), 
+    plot(tRRi,DBV(:,figcont),'r', lw, lw_thick),
+    line([0 t(end)], [100 100], 'Color','m'),hold off;
+    axis tight
+    end   
+    yl = ylim;
+    yl(1) = yl(1)-yl(2)*.05;
+    yl(2) = yl(2)+yl(2)*.05;
+    ylim(yl);
+   xlabel('Time (s)', fs, fs_label);
+    ylabel( [labels(figcont),'(%)'], fs, fs_label);
+    
+  
+subplot(k,1,num_artery+2)
+    plot(tRRi,1000./RRi*60,'r', lw, lw_thick);
+    axis tight
+    yl = ylim;
+    yl(1) = yl(1)-yl(2)*.05;
+    yl(2) = yl(2)+yl(2)*.05;
+    ylim(yl);
+    ylabel('HR (bpm)', fs, fs_label);
+%    xlabel('Time (s)', fs, fs_label);
+subplot(k,1,num_artery+3)
+    plot(tco2,CO2, 'g', lw, lw_thin), hold on;
+    plot(tetCO2,etCO2,'r', lw, lw_thick), hold off;
+    axis tight
+   
+    yl = ylim;
+    yl(1) = yl(1)-yl(2)*.05;
+    yl(2) = yl(2)+yl(2)*.05;
+    ylim(yl);
+    ylabel('etCO2 (mmHg)', fs, fs_label);
+    
+subplot(k,1,num_artery+4)
+    
+    yyaxis left
+    plot(tRRi,MBP./MBV);
+    axis tight
+    ylabel('CVR (mmHg/(cm/s))', fs, fs_label);
+    if(exist('angle_deg'))
+        yyaxis right
+        plot(t_before,angle_deg)
+        ylabel('Tild (deg)', fs, fs_label);
+    end
+  if ~isempty(Notes_list)  
+for no =1:length(Notes_list )
+Notes(no) =  Notes_list{no};
+end
+  else
+      Notes = 'No notes';
+  end
+Notes_cont = uicontrol(gcf,'Style','text','String',Notes,'units','normalized','Position',[.915 .11 .08 .85]);
+% Resize figure for full page printing
+set(gcf, 'PaperPositionMode', 'manual');
+set(gcf, 'PaperUnits', 'inches');
+set(gcf, 'PaperPosition', [0.25 0.25 8 10.5]);
+
+button = myquestdlg('Is the data correctly peak detected?','Continue Operation','Yes','No','Help','No');
+if strcmp(button,'Yes')
+   disp('Matlab is currently saving your files!')
+elseif strcmp(button,'No')
+   disp('Ending Program')
+   quit
+elseif strcmp(button,'Help')
+   disp('Sorry, no help available')
+   quit
+end
+
+hgexport(gcf,char(strcat(infile(1:end-4),'_output1_cleaned%_',initials)), hgexport('factorystyle'), 'Format', 'jpeg');
+close(gcf);
+
+%% plotting IN CMs
+  %% to choose the good points (ikp)
+  
+  BVcm_plotted = BVcm_int;
+MBVcm_plotted = MBVicm;
+SBVcm_plotted = SBVicm;
+DBVcm_plotted = DBVicm;
+
+
+% BVcm_plotted = BVcm(ikp,:); MBVcm_plotted = MBVicm(ikp,:); SBVcm_plotted
+% = SBVicm(ikp,:); DBVcm_plotted = DBVicm(ikp,:);
+
+
+txtfontsize= 11;
+t_name1 = ' ' ;
+t_name2 = ' ' ;
+
+fh = figure(11);
+ set(fh,'Name','CMs')
+clf
+
+% Set default figure size to near maximum of screen size
+scrsz = get(0,'ScreenSize');
+position_default = [0.01*scrsz(3) 0.07*scrsz(4) 0.98*scrsz(3) 0.85*scrsz(4)];
+set(gcf,'position',position_default)
+
+%slashes = findstr(infile,'\');
+slashes = infile;
+plot_title = [infile ' (Original Waveforms) analyzed  ' datestr(now)]; 
+
+% Plot parameters
+fs = 'fontsize';            % save fontsize field property
+fs_title = 14;              % fontsize for titles
+fs_label = 12;              % fontsize for axis labels
+lw = 'LineWidth';           % save linewidth field property
+lw_thin = 0.3;              % linewidth for thin lines
+lw_thick = 2;               % linewidth for thicker lines
+ms = 'markersize';          % save markersize field property
+ms_large = 10;              % markersize for large points
+  k =num_artery+4;
+subplot(k,1,1)
+    plot(t,bp_f, 'b', lw, lw_thin), hold on;
+    plot(tRRi,MBP,'k', lw, lw_thick), 
+    plot(tRRi,SBP,'r', lw, lw_thick), 
+    plot(tRRi,DBP,'r', lw, lw_thick), hold off;
+    
+    axis tight
+    yl = ylim;
+    yl(1) = yl(1)-yl(2)*.05;
+    yl(2) = yl(2)+yl(2)*.05;
+    ylim(yl);
+%    xlabel('Time (s)', fs, fs_label)
+    ylabel({'Cerebral';'Blood Pressure';'(mmHg)'}, fs, fs_label)
+    title(plot_title, fs, fs_title)
+  
+    
+    for figcont = 1:num_artery
+
+        subplot(k,1,figcont+1)
+        plot(t,BVcm_plotted(:,figcont), 'g', lw, lw_thin), hold on;
+        plot(tRRi,MBVcm(:,figcont),'k', lw, lw_thick), 
+        plot(tRRi,SBVcm(:,figcont),'r', lw, lw_thick), 
+        plot(tRRi,DBVcm(:,figcont),'r', lw, lw_thick),
+        line([0 t(end)], [nanmean(MBVcm(:,figcont)) nanmean(MBVcm(:,figcont))], 'Color','m'),
+        plot(t,bv_f_ikp(:,figcont), 'm', lw, lw_thin), hold on;
+        hold off;
+        axis tight
+
+        yl = ylim;
+        yl(1) = yl(1)-yl(2)*.05;
+        yl(2) = yl(2)+yl(2)*.05;
+        ylim(yl);
+        xlabel('Time (s)', fs, fs_label);
+        ylabel([labels(figcont),'(CMs)'], fs, fs_label);
+
+    end
+    
+subplot(k,1,num_artery+2)
+    plot(tRRi,1000./RRi*60,'r', lw, lw_thick);
+    axis tight
+    yl = ylim;
+    yl(1) = yl(1)-yl(2)*.05;
+    yl(2) = yl(2)+yl(2)*.05;
+    ylim(yl);
+    ylabel('HR (bpm)', fs, fs_label);
+%    xlabel('Time (s)', fs, fs_label);
+subplot(k,1,num_artery+3)
+    plot(tco2,CO2, 'g', lw, lw_thin), hold on;
+    plot(tetCO2,etCO2,'r', lw, lw_thick), hold off;
+    axis tight
+
+    yl = ylim;
+    yl(1) = yl(1)-yl(2)*.05;
+    yl(2) = yl(2)+yl(2)*.05;
+    ylim(yl);
+    ylabel('etCO2 (mmHg)', fs, fs_label);
+    
+subplot(k,1,num_artery+4)
+    yyaxis left
+    plot(tRRi,MBP./MBV);
+    axis tight
+    ylabel('CVR (mmHg/(cm/s))', fs, fs_label);
+    if(exist('angle_deg'))
+        yyaxis right
+        plot(t_before,angle_deg)
+        ylabel('Tild (deg)', fs, fs_label);
+    end
+  if ~isempty(Notes_list)  
+for no =1:length(Notes_list )
+Notes(no) =  Notes_list{no};
+end
+  else
+      Notes = 'No notes';
+  end
+Notes_cont = uicontrol(gcf,'Style','text','String',Notes,'units','normalized','Position',[.915 .11 .08 .85]);
+% Resize figure for full page printing
+set(gcf, 'PaperPositionMode', 'manual');
+set(gcf, 'PaperUnits', 'inches');
+set(gcf, 'PaperPosition', [0.25 0.25 8 10.5]);
+
+
+%% the pause added to make the script run faster since the pc runnning the scrip has only 2 GB
+
+    %%  Section save cleaned data
+
+    % Saving Matlab File
+    Matlab_Saving_bar_massage = ('Saving Data AS ****Clean.mat');
+    Matlab_Saving_bar = waitbar(.5,Matlab_Saving_bar_massage);
+     hw=findobj(Matlab_Saving_bar,'Type','Patch');
+    set(hw,'FaceColor','b','EdgeColor','b')
+  outfile_clean = [folder_name '_clean.mat'];
+    save([pathname folder_name '\' outfile_clean])
+        waitbar(1,Matlab_Saving_bar,Matlab_Saving_bar_massage);
+        close(Matlab_Saving_bar)
+    
+    
+%% Saving Figuers 
+Fig_saving_bar_massage= ('Saving Figure aas **.jpg');
+Fig_saving_bar = waitbar(0,Fig_saving_bar_massage);
+hw=findobj(Fig_saving_bar,'Type','Patch');
+    set(hw,'FaceColor','g','EdgeColor','g')
+  %
+%      for i= [1 1001 11]
+     for i= [11]
+      waitbar(.5*i,Fig_saving_bar,Fig_saving_bar_massage);
+    figure(i)
+    set(gcf,'name',cell2str(initials))
+    set(0,'CurrentFigure')
+    orient landscape
+%        set(gcf,'PaperUnits','inches', 'PaperType','Letter'
+%        ,'PaperOrientation','landscape') print
+
+    hgexport(gcf,char(strcat(infile(1:end-4),'_output1_cleanedCMS_',initials)), hgexport('factorystyle'), 'Format', 'jpeg');
+%     graphfile =
+%     [pathname,folder_name,'\',infile(1:end-4),'f',num2str(i)];
+%     saveas(gcf,graphfile,'jpg')
+     end
+     close(Fig_saving_bar)
+     %%
+  % Saving Text Files
+  Notes_saving_bar_massage= ('Saving Figure aas **.jpg');
+Notes_saving_bar = waitbar(0,Notes_saving_bar_massage);
+hw=findobj(Notes_saving_bar,'Type','Patch');
+    set(hw,'FaceColor','g','EdgeColor','g')
+  
+     fid=fopen(folder_name,'wt');
+if ~isempty(Notes_list)
+for i=1:length(Notes_list);
+   waitbar((1/length(Notes_list))*i,Notes_saving_bar,Notes_saving_bar_massage);
+    fprintf(fid,'%s',mat2str(cell2mat(Notes_list{i})));
+    fprintf(fid,'\n');
+end
+fclose(fid);
+ end
+close(Notes_saving_bar)
+
+
+
+ %% Double checking data alignment
+
+figure;
+pause(0.00001); frame_h = get(handle(gcf),'JavaFrame'); set(frame_h,'Maximized',1);
+
+plot(t,BV),hold on;plot(t,BP,'r'); axis tight; scrollplot;xlim([t(end)/2 t(end)/2+10]);grid on 
+%set(gcf,'units','normalized','outerposition',[0 0 1 1]);
+legend('Blood Velocity','Blood Pressure');title('Is the BV and BP aligned?')
+
+txt = uicontrol('Style','text','units','normalized','Position',[.1 .04 .05 .05],'String','Is the data aligned?');
+pb = uicontrol(gcf,'Style','pushbutton','String','Yes','units','normalized','Position',[0.175 .04 .05 .05],'Callback','button = 1; uiresume;');
+pb2 = uicontrol(gcf,'Style','pushbutton','String','No','units','normalized','Position',[0.25 .04 .05 .05],'Callback','button = 2; uiresume;');
+
+uiwait(gcf);
+
+
+if button==2 
+        %abc=[strcat('B',num2str(xx+1))];
+        %xlswrite('Alignment_of_CVRTfiles.xlsx', {'No'},'Sheet1', abc);
+        %close figure 1
+    
+else
+end
+if button==1
+        %abc=[strcat('B',num2str(xx+1))];
+        %xlswrite('Alignment_of_CVRTfiles.xlsx', {'Yes'},'Sheet1', abc);
+        %close figure 1
+        
+else
+end
+
+    figbeg=figure; plot(t,BV),hold on;plot(t,BP,'r'); axis tight;xlim([5 15]);saveas(figbeg, 'Align_beg.jpg')
+    figmid=figure; plot(t,BV),hold on;plot(t,BP,'r'); axis tight;xlim([t(end)/2 t(end)/2+10]);saveas(figmid, 'Align_mid.jpg')
+    figend=figure; plot(t,BV),hold on;plot(t,BP,'r'); axis tight;xlim([t(end)-30 t(end)-15]);saveas(figend, 'Align_end.jpg')
+    
+    close all;
+    
+    
+%% Key Press Callback Function
+function keyPressCallbackCO2Select(~, event)
+    % Get figure and find the buttons
+    fig = gcf;
+    pb1u = findobj(fig, 'String', 'Remove (r)');
+    pb2u = findobj(fig, 'String', 'Add (a)');
+    pb4u = findobj(fig, 'String', 'Add Exact (e)');
+    pb3u = findobj(fig, 'String', 'Undo (u)');
+    pb7l = findobj(fig, 'String', 'Instructions (i)');
+    pbexit = findobj(fig, 'String', 'Done (d)');
+
+ % Map Key Press to Simulate Button Click
+    switch event.Key
+        case 'r'  % Press 'r' to trigger Remove
+            evalin('base', pb1u.Callback);
+        case 'a'  % Press 'a' to trigger Add
+            evalin('base', pb2u.Callback);
+        case 'e'  % Press 'e' to trigger Add Exact
+            evalin('base', pb4u.Callback);
+        case 'u'  % Press 'u' to trigger Undo
+            evalin('base', pb3u.Callback);
+        case 'i'  % Press 'i' to trigger Instructions
+            evalin('base', pb7l.Callback);
+        case 'd'  % Press 'd' to trigger Done
+            evalin('base', pbexit.Callback);
+    end
+end
+    
